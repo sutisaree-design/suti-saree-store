@@ -14,7 +14,7 @@
 -- run -- this table only holds data pulled from WooCommerce, nothing
 -- created directly in this store is lost.
 TRUNCATE TABLE woocommerce_campaign_sends;
-TRUNCATE TABLE woocommerce_customers;
+TRUNCATE TABLE woocommerce_customers CASCADE;
 
 -- Switch the de-duplication key from wc_customer_id to email, since email
 -- is the real, stable identity for a customer (a guest's order id is not).

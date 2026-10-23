@@ -19,5 +19,5 @@ ALTER TABLE products
 -- Keep counters non-negative even if a client fires an "unlike" without a
 -- matching prior "like" (e.g. stale localStorage after a DB reset).
 ALTER TABLE products
-  ADD CONSTRAINT IF NOT EXISTS video_like_count_non_negative CHECK (video_like_count >= 0),
-  ADD CONSTRAINT IF NOT EXISTS video_share_count_non_negative CHECK (video_share_count >= 0);
+  ADD CONSTRAINT video_like_count_non_negative CHECK (video_like_count >= 0),
+  ADD CONSTRAINT video_share_count_non_negative CHECK (video_share_count >= 0);
