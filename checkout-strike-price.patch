@@ -1,0 +1,16 @@
+diff --git a/components/checkout/sticky-order-bar.tsx b/components/checkout/sticky-order-bar.tsx
+index 701b080..49ad0b2 100644
+--- a/components/checkout/sticky-order-bar.tsx
++++ b/components/checkout/sticky-order-bar.tsx
+@@ -68,6 +68,11 @@ export default function StickyOrderBar({
+           )}
+         </span>
+         <span className="flex items-center gap-1.5">
++          {mrpTotal > payableTotal && (
++            <span className="font-serif text-xs text-muted-foreground line-through sm:text-sm">
++              {formatINR(mrpTotal)}
++            </span>
++          )}
+           <span className="font-serif text-base font-bold text-primary sm:text-lg">
+             {formatINR(payableTotal)}
+           </span>

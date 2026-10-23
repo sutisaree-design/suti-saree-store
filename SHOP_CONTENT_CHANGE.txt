@@ -1,0 +1,41 @@
+// =====================================
+// app/shop/shop-content.tsx - UPDATED
+// =====================================
+// 
+// CHANGE ONLY: Lines 48-52
+// Replace the QUICK_FILTERS array
+//
+
+// ❌ OLD CODE (remove this):
+/*
+const QUICK_FILTERS: { key: SortKey; label: string; icon: typeof TrendingDown }[] = [
+  { key: 'price-drop', label: 'Price Drop', icon: TrendingDown },
+  { key: 'rating', label: 'Bestseller', icon: Flame },
+  { key: 'most-gifted', label: 'Most Gifted', icon: Gift },
+];
+*/
+
+// ✅ NEW CODE (replace with this):
+const QUICK_FILTERS: { key: SortKey; label: string; icon: typeof TrendingDown }[] = [
+  { key: 'popularity', label: 'Trending Now', icon: Flame },
+  { key: 'price-drop', label: 'Price Drop', icon: TrendingDown },
+  { key: 'rating', label: 'Bestseller', icon: Flame },
+  { key: 'most-gifted', label: 'Most Gifted', icon: Gift },
+];
+
+// =====================================
+// EXPLANATION
+// =====================================
+//
+// What changed:
+// 1. Added popularity as FIRST item
+// 2. Label: 'Trending Now' (user-friendly)
+// 3. Icon: Flame (matches trending theme)
+//
+// Result:
+// Quick filter buttons now show as:
+// [Trending Now] [Price Drop] [Bestseller] [Most Gifted]
+//      ⭐ First
+//
+// Users can now instantly see trending products with one click!
+//

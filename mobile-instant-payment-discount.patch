@@ -1,0 +1,184 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 0ce2f3c..989917e 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -1483,7 +1483,7 @@ export default function CheckoutPage() {
+       <StickyOrderBar
+         items={items}
+         subtotal={subtotal}
+-        mrpTotal={mrpTotal}
++        mrpTotal={subtotal + shipping}
+         shipping={shipping}
+         payableTotal={payableTotal}
+         totalSavings={totalSavings}
+diff --git a/app/layout.tsx b/app/layout.tsx
+index b2f698f..cad07e3 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -6,6 +6,7 @@ import Providers from '@/components/providers';
+ import AnalyticsScripts from '@/components/analytics-scripts';
+ import { getServerSupabase } from '@/lib/supabase-server';
+ import { SeoSettings, AnalyticsSettings } from '@/lib/marketing-api';
++import { PaymentDiscountSettings, DEFAULT_PAYMENT_DISCOUNT_SETTINGS } from '@/lib/settings-api';
+ 
+ const inter = Inter({
+   subsets: ['latin'],
+@@ -139,12 +140,34 @@ export async function generateMetadata(): Promise<Metadata> {
+   };
+ }
+ 
++// Reads Admin > Payments > "extra % off on online payment" incentive
++// server-side so the checkout/product-page badge ("Upto ₹X off on prepaid
++// orders") is already correct in the very first HTML sent to the browser —
++// no client-side round trip to wait on. That round trip is what made the
++// badge look "delayed" on mobile: same fetch, but mobile's higher network
++// latency made the gap before it appeared much more noticeable than on a
++// fast desktop connection.
++async function getPaymentDiscountSettings(): Promise<PaymentDiscountSettings> {
++  try {
++    const supabase = getServerSupabase();
++    const { data } = await supabase
++      .from('settings')
++      .select('value')
++      .eq('key', 'payment_discount')
++      .maybeSingle();
++    return { ...DEFAULT_PAYMENT_DISCOUNT_SETTINGS, ...((data?.value as Partial<PaymentDiscountSettings>) || {}) };
++  } catch {
++    return DEFAULT_PAYMENT_DISCOUNT_SETTINGS;
++  }
++}
++
+ export default async function RootLayout({
+   children,
+ }: {
+   children: React.ReactNode;
+ }) {
+   const analytics = await getAnalyticsSettings();
++  const initialPaymentDiscount = await getPaymentDiscountSettings();
+   const gaId = analytics.ga_enabled ? analytics.ga_measurement_id.trim() : '';
+   const gtmId = analytics.gtm_enabled ? analytics.gtm_container_id.trim() : '';
+   const googleAdsId = analytics.google_ads_id.trim();
+@@ -174,7 +197,7 @@ export default async function RootLayout({
+         <AnalyticsScripts gaId={gaId} gtmId={gtmId} googleAdsId={googleAdsId} pixelId={pixelId} />
+       </head>
+       <body className="font-sans antialiased">
+-        <Providers>{children}</Providers>
++        <Providers initialPaymentDiscount={initialPaymentDiscount}>{children}</Providers>
+       </body>
+     </html>
+   );
+diff --git a/components/providers.tsx b/components/providers.tsx
+index 69567ca..e86a0d8 100644
+--- a/components/providers.tsx
++++ b/components/providers.tsx
+@@ -4,6 +4,7 @@ import React from 'react';
+ import dynamic from 'next/dynamic';
+ import { usePathname } from 'next/navigation';
+ import { CartProvider, CategoriesProvider, PaymentDiscountProvider } from '@/lib/cart-context';
++import type { PaymentDiscountSettings } from '@/lib/settings-api';
+ import { AuthProvider } from '@/lib/auth-context';
+ import { Toaster } from 'sonner';
+ import CartDrawer from './cart-drawer';
+@@ -29,7 +30,16 @@ const SaleCountdownBar = dynamic(() => import('./growth/sale-countdown-bar'), {
+ const ExitIntentModal = dynamic(() => import('./growth/exit-intent-modal'), { ssr: false });
+ const SocialProofToast = dynamic(() => import('./growth/social-proof-toast'), { ssr: false });
+ 
+-export default function Providers({ children }: { children: React.ReactNode }) {
++export default function Providers({
++  children,
++  initialPaymentDiscount,
++}: {
++  children: React.ReactNode;
++  /** Server-fetched so the payment-discount badge is correct in the very
++   *  first paint — see app/layout.tsx. Optional only so the type still
++   *  works for any other place Providers might be mounted without it. */
++  initialPaymentDiscount?: PaymentDiscountSettings;
++}) {
+   const pathname = usePathname();
+   const isHome = pathname === '/';
+   const isAdminRoute = pathname?.startsWith('/admin');
+@@ -53,7 +63,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
+     return (
+       <AuthProvider>
+         <CategoriesProvider>
+-          <PaymentDiscountProvider>
++          <PaymentDiscountProvider initialValue={initialPaymentDiscount}>
+             <CartProvider>
+               {children}
+               <Toaster position="top-center" richColors closeButton offset="68px" />
+@@ -67,7 +77,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
+   return (
+     <AuthProvider>
+       <CategoriesProvider>
+-        <PaymentDiscountProvider>
++        <PaymentDiscountProvider initialValue={initialPaymentDiscount}>
+           <CartProvider>
+             <ActivityTracker />
+             <AffiliateTracker />
+diff --git a/lib/cart-context.tsx b/lib/cart-context.tsx
+index c09da54..9a77cd4 100644
+--- a/lib/cart-context.tsx
++++ b/lib/cart-context.tsx
+@@ -604,16 +604,57 @@ interface PaymentDiscountContextValue {
+ const PaymentDiscountContext = createContext<PaymentDiscountContextValue | undefined>(
+   undefined
+ );
+-
+-export function PaymentDiscountProvider({ children }: { children: React.ReactNode }) {
++const PAYMENT_DISCOUNT_CACHE_KEY = 'saaj-payment-discount-v1';
++
++// Reads whatever was cached from the last successful fetch, synchronously,
++// so the very first render already has real data instead of the "off"
++// placeholder — that placeholder is what made the discount badge look like
++// it was "delayed" until something else (e.g. a scroll) forced a re-render
++// once the network call finally came back. Falls through safely on SSR
++// (no window) and on any parse error.
++const readCachedPaymentDiscount = (): PaymentDiscountSettings => {
++  if (typeof window === 'undefined') return DEFAULT_PAYMENT_DISCOUNT_SETTINGS;
++  try {
++    const raw = localStorage.getItem(PAYMENT_DISCOUNT_CACHE_KEY);
++    return raw ? (JSON.parse(raw) as PaymentDiscountSettings) : DEFAULT_PAYMENT_DISCOUNT_SETTINGS;
++  } catch {
++    return DEFAULT_PAYMENT_DISCOUNT_SETTINGS;
++  }
++};
++
++export function PaymentDiscountProvider({
++  children,
++  initialValue,
++}: {
++  children: React.ReactNode;
++  /** Server-fetched value passed down from app/layout.tsx (see there for
++   *  why) — used as the very first state instead of the generic default,
++   *  so there's nothing to "catch up" to on the client at all. Falls back
++   *  to the localStorage cache, then the hardcoded default, only for the
++   *  rare case this provider is mounted somewhere without it. */
++  initialValue?: PaymentDiscountSettings;
++}) {
+   const [paymentDiscount, setPaymentDiscount] = useState<PaymentDiscountSettings>(
+-    DEFAULT_PAYMENT_DISCOUNT_SETTINGS
++    () => initialValue ?? readCachedPaymentDiscount()
+   );
+ 
+   useEffect(() => {
++    // Server already gave us a fresh value for this request — still worth
++    // a background refresh (an admin could save a change between this
++    // page's server render and the moment it's viewed), but no rush.
+     fetchPaymentDiscountSettings()
+-      .then(setPaymentDiscount)
+-      .catch(() => setPaymentDiscount(DEFAULT_PAYMENT_DISCOUNT_SETTINGS));
++      .then((settings) => {
++        setPaymentDiscount(settings);
++        try {
++          localStorage.setItem(PAYMENT_DISCOUNT_CACHE_KEY, JSON.stringify(settings));
++        } catch {
++          // storage full/unavailable — cache is a nice-to-have, safe to skip
++        }
++      })
++      .catch(() => {
++        // keep whatever we already have (server value or cache) rather
++        // than clobbering it with the generic default on a failed refresh
++      });
+   }, []);
+ 
+   const value: PaymentDiscountContextValue = { paymentDiscount };

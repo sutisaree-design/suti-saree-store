@@ -1,0 +1,215 @@
+diff --git a/app/api/cron/daily-jobs/route.ts b/app/api/cron/daily-jobs/route.ts
+index c76c573..9847ab9 100644
+--- a/app/api/cron/daily-jobs/route.ts
++++ b/app/api/cron/daily-jobs/route.ts
+@@ -4,6 +4,7 @@ import {
+   runEmailAutomationJob,
+   runVendorReturnTimersJob,
+   runVendorSettlementJob,
++  runStuckVendorListingsJob,
+ } from '@/lib/cron-jobs';
+ 
+ export const dynamic = 'force-dynamic';
+@@ -55,6 +56,12 @@ export async function GET(req: Request) {
+     results.vendorReturnTimers = { error: err?.message || 'Failed' };
+   }
+ 
++  try {
++    results.stuckVendorListings = await runStuckVendorListingsJob();
++  } catch (err: any) {
++    results.stuckVendorListings = { error: err?.message || 'Failed' };
++  }
++
+   // Weekly settlement: only run it on Mondays so behaviour matches the
+   // old "0 3 * * 1" (weekly, Monday) schedule even though this route
+   // itself is hit daily.
+diff --git a/app/api/cron/stuck-vendor-listings/route.ts b/app/api/cron/stuck-vendor-listings/route.ts
+new file mode 100644
+index 0000000..953b8ca
+--- /dev/null
++++ b/app/api/cron/stuck-vendor-listings/route.ts
+@@ -0,0 +1,30 @@
++import { NextResponse } from 'next/server';
++import { runStuckVendorListingsJob } from '@/lib/cron-jobs';
++
++export const dynamic = 'force-dynamic';
++
++// Standalone route for the stuck-vendor-listings safety net (see
++// lib/cron-jobs.ts::runStuckVendorListingsJob for what it does and why).
++//
++// This job also runs once a day as part of /api/cron/daily-jobs, but a
++// once-daily cadence isn't great for this specific job — a vendor
++// product shouldn't have to wait up to 24 hours to get unstuck. If you
++// want it running more often, point an external scheduler (e.g.
++// cron-job.org, which is free) at this route every 5-10 minutes. Same
++// CRON_SECRET bearer check as the other /api/cron/* routes in this repo.
++export async function GET(req: Request) {
++  const cronSecret = process.env.CRON_SECRET;
++  if (cronSecret) {
++    const auth = req.headers.get('authorization');
++    if (auth !== `Bearer ${cronSecret}`) {
++      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++    }
++  }
++
++  try {
++    const result = await runStuckVendorListingsJob();
++    return NextResponse.json({ success: true, ...result });
++  } catch (err: any) {
++    return NextResponse.json({ error: err?.message || 'Cron failed' }, { status: 500 });
++  }
++}
+diff --git a/app/api/vendor/ai-process/[id]/route.ts b/app/api/vendor/ai-process/[id]/route.ts
+index 0cf9ed0..3ad1d3f 100644
+--- a/app/api/vendor/ai-process/[id]/route.ts
++++ b/app/api/vendor/ai-process/[id]/route.ts
+@@ -5,7 +5,12 @@ import { generateVendorListing } from '@/lib/vendor-ai-listing';
+ import { sendEmail } from '@/lib/email';
+ import { vendorProductLiveEmail, vendorProductEditLiveEmail } from '@/lib/email-templates';
+ 
+-// Allow up to 60 seconds — NVIDIA NIM free tier can be slow.
++// Allow up to 60 seconds on platforms that support it (e.g. Vercel).
++// NOTE: this has no effect on Netlify — its default function timeout is
++// only 10s regardless of this value. See the try/catch + fallback below,
++// and lib/vendor-ai-listing.ts's 8s internal timeout, which together make
++// sure the product still gets published even if the function gets killed
++// before AI finishes.
+ export const maxDuration = 60;
+ 
+ /**
+@@ -34,6 +39,34 @@ export async function POST(req: Request, { params }: { params: { id: string } })
+ 
+   const admin = getSupabaseAdmin();
+ 
++  try {
++    return await handleAiProcess({ req, admin, productId, isEdit });
++  } catch (err) {
++    // Last-resort fallback: if ANYTHING above threw unexpectedly (auth,
++    // DB, AI call, whatever) the product must not stay stuck in
++    // pending_review forever. Force-publish it with whatever basic
++    // fields it already has, then report the failure.
++    console.error('[vendor/ai-process] unhandled error, force-publishing product', productId, err);
++    try {
++      await admin.from('products').update({ approval_status: 'live' }).eq('id', productId);
++    } catch (fallbackErr) {
++      console.error('[vendor/ai-process] fallback force-publish also failed', productId, fallbackErr);
++    }
++    return NextResponse.json({ error: 'Internal error, product force-published as fallback' }, { status: 500 });
++  }
++}
++
++async function handleAiProcess({
++  req,
++  admin,
++  productId,
++  isEdit,
++}: {
++  req: Request;
++  admin: ReturnType<typeof getSupabaseAdmin>;
++  productId: string;
++  isEdit: boolean;
++}) {
+   // ── Auth: internal secret OR user session ──────────────────────────────
+   const internalSecret = req.headers.get('x-internal-secret');
+   const sessionSecret = process.env.SESSION_SECRET;
+diff --git a/lib/cron-jobs.ts b/lib/cron-jobs.ts
+index 4dadd3d..32efa18 100644
+--- a/lib/cron-jobs.ts
++++ b/lib/cron-jobs.ts
+@@ -261,6 +261,48 @@ export async function runVendorReturnTimersJob() {
+   };
+ }
+ 
++// ----------------------------- Stuck vendor listings (safety net) -----------------------------
++// Vendor products go to 'pending_review' right after creation, and are
++// supposed to flip to 'live' once /api/vendor/ai-process/[id] finishes
++// (with or without AI-generated fields). If that route's function gets
++// killed mid-flight (e.g. platform function timeout) or the client's
++// fire-and-forget call never lands, a product can get stuck in
++// pending_review forever. This job is the safety net: anything that's
++// been pending_review for longer than STUCK_MINUTES gets force-published
++// as-is, so vendors never lose a listing permanently.
++const STUCK_MINUTES = 10;
++
++export async function runStuckVendorListingsJob() {
++  const supabase = getSupabaseAdmin();
++  const cutoff = new Date(Date.now() - STUCK_MINUTES * 60 * 1000).toISOString();
++
++  const { data: stuckProducts, error } = await supabase
++    .from('products')
++    .select('id, name, vendor_id, approval_status_changed_at')
++    .eq('approval_status', 'pending_review')
++    .lte('approval_status_changed_at', cutoff);
++
++  if (error) throw error;
++
++  let published = 0;
++  const errors: string[] = [];
++
++  for (const product of stuckProducts ?? []) {
++    try {
++      const { error: updateError } = await supabase
++        .from('products')
++        .update({ approval_status: 'live' })
++        .eq('id', product.id);
++      if (updateError) throw updateError;
++      published++;
++    } catch (itemErr: any) {
++      errors.push(`product ${product.id}: ${itemErr?.message || itemErr}`);
++    }
++  }
++
++  return { checked: stuckProducts?.length ?? 0, published, errors };
++}
++
+ // ----------------------------- Vendor settlement (weekly) -----------------------------
+ export async function runVendorSettlementJob() {
+   const supabase = getSupabaseAdmin();
+diff --git a/lib/vendor-ai-listing.ts b/lib/vendor-ai-listing.ts
+index 5f5937b..eec84d5 100644
+--- a/lib/vendor-ai-listing.ts
++++ b/lib/vendor-ai-listing.ts
+@@ -123,8 +123,14 @@ export async function generateVendorListing(input: VendorAIInput): Promise<Vendo
+       ]
+     : promptText;
+ 
++  // NOTE: keep this well under the hosting platform's function timeout.
++  // Netlify's default function timeout is only 10s, so 55s was causing
++  // the whole function (and this fetch) to get killed mid-flight, which
++  // left the product stuck in pending_review forever. 8s gives the NIM
++  // call a real chance while still leaving headroom for the rest of the
++  // route (DB update, email) to run within a 10s budget.
+   const controller = new AbortController();
+-  const timeout = setTimeout(() => controller.abort(), 55_000);
++  const timeout = setTimeout(() => controller.abort(), 8_000);
+ 
+   let res: Response;
+   try {
+@@ -143,6 +149,12 @@ export async function generateVendorListing(input: VendorAIInput): Promise<Vendo
+         response_format: { type: 'json_object' },
+       }),
+     });
++  } catch (err) {
++    // Network error, abort/timeout, DNS failure, etc. Never let this
++    // throw out of the function — caller falls back to publishing the
++    // product with the vendor's basic fields instead of AI-generated ones.
++    console.error('[vendor-ai-listing] NIM fetch failed:', err);
++    return null;
+   } finally {
+     clearTimeout(timeout);
+   }
+@@ -152,7 +164,13 @@ export async function generateVendorListing(input: VendorAIInput): Promise<Vendo
+     return null;
+   }
+ 
+-  const data = await res.json();
++  let data: any;
++  try {
++    data = await res.json();
++  } catch (err) {
++    console.error('[vendor-ai-listing] failed to parse NIM response as JSON:', err);
++    return null;
++  }
+   const text: string = data?.choices?.[0]?.message?.content ?? '';
+   const cleaned = text.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+ 

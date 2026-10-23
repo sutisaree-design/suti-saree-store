@@ -1,0 +1,68 @@
+diff --git a/app/api/admin/vendor-products/route.ts b/app/api/admin/vendor-products/route.ts
+index 7a35758..85c656c 100644
+--- a/app/api/admin/vendor-products/route.ts
++++ b/app/api/admin/vendor-products/route.ts
+@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
+ import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
+ import { getSupabaseAdmin } from '@/lib/supabase-admin';
+ import { notifyVendorProductStatus } from '@/lib/vendor-notifications';
++import { runStuckVendorListingsJob } from '@/lib/cron-jobs';
+ 
+ // ---------------------------------------------------------------------
+ // Phase 2, Part 5 — Admin "Vendor Submissions".
+@@ -47,6 +48,18 @@ export async function GET(req: Request) {
+ 
+   const supabase = getSupabaseAdmin();
+ 
++  // Same self-healing safety net as /api/vendor/products — see the
++  // comment there. This app's cron schedule lives in vercel.json, which
++  // Netlify (the actual host) never reads, so the dedicated cron route
++  // never fired in production. Running it here means the admin "Manage
++  // Products" screen self-heals any product stuck in pending_review the
++  // moment it's opened, regardless of hosting/cron setup.
++  try {
++    await runStuckVendorListingsJob();
++  } catch (stuckErr) {
++    console.error('[admin/vendor-products GET] stuck-listing safety net failed', stuckErr);
++  }
++
+   try {
+     let query = supabase
+       .from('products')
+diff --git a/app/api/vendor/products/route.ts b/app/api/vendor/products/route.ts
+index fc99c5a..a80e06f 100644
+--- a/app/api/vendor/products/route.ts
++++ b/app/api/vendor/products/route.ts
+@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
+ import { getCurrentUser, getSupabaseServer } from '@/lib/supabase-server-auth';
+ import { getSupabaseAdmin } from '@/lib/supabase-admin';
+ import { suggestVendorProductPrice } from '@/lib/ai-pricing';
++import { runStuckVendorListingsJob } from '@/lib/cron-jobs';
+ 
+ // Fields the VENDOR is ever allowed to see about their own submissions.
+ // Deliberately excludes vendor_id (redundant — it's their own id anyway)
+@@ -57,6 +58,24 @@ export async function GET() {
+       return NextResponse.json({ error: 'Your vendor account has been suspended' }, { status: 403 });
+     }
+ 
++    // Self-healing safety net (belt-and-suspenders alongside the
++    // /api/cron/stuck-vendor-listings route): this project's crons are
++    // declared in vercel.json, which is a Vercel-only config file and is
++    // silently ignored on Netlify (the platform this app is actually
++    // deployed on — see the Netlify-specific timeout notes in
++    // lib/vendor-ai-listing.ts). That meant runStuckVendorListingsJob()
++    // never actually ran in production, so any product whose
++    // fire-and-forget AI call died mid-flight stayed stuck in
++    // 'pending_review' ("Processing...") forever. Running it here means
++    // it fires every time a vendor opens their Products tab, independent
++    // of whether any external/platform cron is wired up at all. It's a
++    // cheap, indexed query so this adds negligible latency to the page.
++    try {
++      await runStuckVendorListingsJob();
++    } catch (stuckErr) {
++      console.error('[vendor/products GET] stuck-listing safety net failed', stuckErr);
++    }
++
+     const { data, error } = await supabase
+       .from('products')
+       .select(VENDOR_PRODUCT_COLUMNS)

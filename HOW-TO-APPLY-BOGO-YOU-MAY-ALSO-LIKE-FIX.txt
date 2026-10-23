@@ -1,0 +1,58 @@
+BOGO PRODUCT PAGE PAR "YOU MAY ALSO LIKE" MISSING — FIX
+=========================================================
+
+Issue
+-----
+Jis product par live "Buy X Get Y" (BOGO) offer hota tha, uss page par
+sirf "Complete your Buy 2 Get 1 Free offer" carousel dikhta tha.
+"You may also like" (same category ke generic related products) us page
+par bilkul render hi nahi hota tha.
+
+Wajah
+-----
+app/product/[slug]/product-detail.tsx mein ek hi <RelatedProducts>
+component call hota tha. Jab BOGO collection ke products mil jaate
+(overrideProducts), to wahi ek carousel BOGO offer dikhata tha aur
+generic "You may also like" (score-based same-category matches) poori
+tarah replace/skip ho jaata tha — kyunki component sirf ek list render
+karta hai, dono nahi.
+
+Fix
+---
+Ab jab BOGO products mil jaate hain, to DO alag <RelatedProducts>
+render hote hain:
+  1) Pehla: BOGO offer wala carousel ("Complete your ... offer") — jaisa
+     pehle tha, waisa hi.
+  2) Dusra (naya): plain <RelatedProducts current={product}
+     allProducts={products} /> — koi overrideProducts nahi, isliye ye
+     apna default title "You may also like" ke saath generic
+     same-category matches dikhata hai.
+
+Order same rehta hai jaisa aapne chaha:
+  BOGO offer carousel -> You may also like -> Recently Viewed
+
+Agar us product par koi live BOGO offer nahi hai (bogoCollectionProducts
+empty), to page bilkul pehle jaisa hi behave karega — sirf ek
+"You may also like" carousel, koi extra/duplicate section nahi.
+
+File jo change hui
+-------------------
+  app/product/[slug]/product-detail.tsx
+
+Kaise apply karein
+-------------------
+1) Is zip ko apne project root me extract karo (E-Commerce-ethnic folder
+   ke andar) — wahi folder structure hai jo aapke project me hai
+   (app/product/[slug]/product-detail.tsx), isliye extract karte hi wo
+   apne aap sahi jagah replace ho jaayegi. "Yes, overwrite" karna.
+2) Terminal me:
+     git add app/product/[slug]/product-detail.tsx
+     git commit -m "Show You may also like alongside BOGO offer on product page"
+     git push
+3) Deploy ho jaane ke baad kisi BOGO product page pe check karo:
+   Complete your Buy X Get Y offer -> You may also like -> Recently Viewed
+
+Verified: `npx tsc --noEmit` clean pass hua is file pe.
+
+Alternate: bogo-you-may-also-like-fix.diff bhi diya hai agar aap
+`git apply` se seedha patch lagana chahein.

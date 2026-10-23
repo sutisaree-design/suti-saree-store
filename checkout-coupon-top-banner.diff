@@ -1,0 +1,106 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index ccc85bb..ab71109 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -6,7 +6,7 @@ import Image from 'next/image';
+ import { toPublicMediaUrl } from '@/lib/media-url';
+ import NextScript from 'next/script';
+ import { useRouter } from 'next/navigation';
+-import { Lock, Loader2, CreditCard, Tag, X, Wallet, Sparkles, Gift, Store, Minus, Plus, ChevronRight, BadgePercent } from 'lucide-react';
++import { Lock, Loader2, CreditCard, Tag, X, Wallet, Sparkles, Gift, Store, Minus, Plus, ChevronRight, BadgePercent, BadgeCheck } from 'lucide-react';
+ import {
+   useCart,
+   usePaymentDiscount,
+@@ -1394,6 +1394,92 @@ export default function CheckoutPage() {
+         </div>
+       )}
+ 
++      {/* Top coupon banner — same offer shown lower down inside the Order
++          Summary card, but surfaced here too so it's visible immediately
++          on page load instead of only after scrolling past the whole
++          address form (which is what used to happen on mobile, since the
++          Order Summary card sits after the form in DOM order there).
++          Stays visible after a coupon is applied too — it just switches
++          to the "applied" state instead of disappearing. */}
++      {appliedCoupon ? (
++        <div className="mb-4 overflow-hidden rounded-lg border border-border/60">
++          <div className="flex items-center justify-between gap-3 bg-card px-3 py-3">
++            <span className="flex items-center gap-1.5 text-sm font-medium text-secondary-foreground">
++              <BadgeCheck className="h-4 w-4 text-green-600" />
++              &quot;{appliedCoupon.code}&quot; applied
++            </span>
++            <button
++              type="button"
++              onClick={handleRemoveCoupon}
++              className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-destructive"
++            >
++              Remove
++            </button>
++          </div>
++          {availableCoupons.length > 1 && (
++            <button
++              type="button"
++              onClick={() => setShowAllCoupons((v) => !v)}
++              className="flex w-full items-center gap-0.5 border-t border-border/60 bg-card px-3 py-2 text-xs font-medium text-secondary hover:underline"
++            >
++              View all coupons <ChevronRight className="h-3 w-3" />
++            </button>
++          )}
++        </div>
++      ) : (
++        (paymentDiscount.enabled && potentialOnlinePaymentDiscount > 0 || availableCoupons.length > 0) && (
++          <div className="mb-4 overflow-hidden rounded-lg border border-border/60">
++            {paymentDiscount.enabled && potentialOnlinePaymentDiscount > 0 && (
++              <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 text-center text-xs font-semibold text-primary-foreground">
++                <BadgePercent className="h-3.5 w-3.5" />
++                Upto {formatINR(potentialOnlinePaymentDiscount)} off on prepaid orders
++              </div>
++            )}
++            {availableCoupons.length > 0 && (
++              <div className="flex items-center justify-between gap-3 bg-card px-3 py-3">
++                <div className="flex min-w-0 items-start gap-2.5">
++                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-secondary/15 text-secondary">
++                    <Tag className="h-3.5 w-3.5" />
++                  </span>
++                  <div className="min-w-0">
++                    <p className="truncate text-sm font-semibold text-foreground">
++                      Save{' '}
++                      {availableCoupons[0].discount_type === 'percentage'
++                        ? `${availableCoupons[0].discount_value}%`
++                        : formatINR(availableCoupons[0].discount_value)}{' '}
++                      with &quot;{availableCoupons[0].code}&quot;
++                    </p>
++                    {availableCoupons.length > 1 ? (
++                      <button
++                        type="button"
++                        onClick={() => setShowAllCoupons((v) => !v)}
++                        className="mt-0.5 flex items-center gap-0.5 text-xs font-medium text-secondary hover:underline"
++                      >
++                        View all coupons <ChevronRight className="h-3 w-3" />
++                      </button>
++                    ) : (
++                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
++                        {availableCoupons[0].min_order_value > 0
++                          ? `On orders above ${formatINR(availableCoupons[0].min_order_value)}`
++                          : 'No minimum order value'}
++                      </p>
++                    )}
++                  </div>
++                </div>
++                <button
++                  type="button"
++                  onClick={() => handleApplyFromList(availableCoupons[0])}
++                  disabled={applyingFromList === availableCoupons[0].code}
++                  className="shrink-0 rounded-md border border-secondary px-3.5 py-1.5 text-xs font-semibold text-secondary transition-colors hover:bg-secondary hover:text-secondary-foreground disabled:opacity-60"
++                >
++                  {applyingFromList === availableCoupons[0].code ? 'Applying…' : 'Apply'}
++                </button>
++              </div>
++            )}
++          </div>
++        )
++      )}
++
+       <StickyOrderBar
+         items={items}
+         subtotal={subtotal}

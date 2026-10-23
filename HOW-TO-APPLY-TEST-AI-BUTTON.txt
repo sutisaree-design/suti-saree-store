@@ -1,0 +1,40 @@
+NAYA FEATURE: "Search by Photo — AI" section me "Test AI connection" button add kiya gaya hai.
+
+Ismein 2 files hain jo change/naye hue:
+1) components/admin/settings-panel.tsx   (MODIFIED - existing file replace karo)
+2) app/api/admin/image-search-ai-test/route.ts  (NAYI FILE - naya folder banega)
+
+KAISE APPLY KAREIN (2 tarike, jo aasan lage wo use karo):
+
+--- Option A: Seedha files copy-paste karo ---
+1. Is zip ke andar "components/admin/settings-panel.tsx" ko apne project ke
+   usi path par copy karke REPLACE kar do.
+2. Is zip ke andar "app/api/admin/image-search-ai-test/route.ts" ko apne
+   project me usi path par copy kar do (folder khud bana lena agar exist
+   nahi karta).
+3. Phir:
+     git add -A
+     git commit -m "Add Test AI connection button for Search by Photo AI"
+     git push
+
+--- Option B: Patch file apply karo (agar aap git patch use karna jaante ho) ---
+1. "changes-test-ai-button.patch" file ko apne project ke root me copy karo
+   (jahan .git folder hai).
+2. Terminal me project root se run karo:
+     git apply changes-test-ai-button.patch
+3. Phir:
+     git add -A
+     git commit -m "Add Test AI connection button for Search by Photo AI"
+     git push
+
+Yeh button admin Settings panel me "Search by Photo — AI" section ke andar
+dikhega, bilkul "AI Chat Assistant" section ke "Test AI connection" button
+jaisa. Click karne par yeh NVIDIA_API_KEY se seedha
+meta/llama-3.2-90b-vision-instruct model (jo photo-search feature use karta
+hai) ko ek real test request bhejta hai aur turant bata deta hai:
+  - Key missing hai ya nahi
+  - Connection working hai ya nahi (aur kitne ms me)
+  - Agar fail ho to exact HTTP error / reason kya hai
+
+Koi existing functionality nahi tooti — sirf ek naya button + ek naya
+admin-only API route add hua hai.

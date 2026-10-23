@@ -1,0 +1,202 @@
+diff --git a/app/api/admin/image-search-ai-test/route.ts b/app/api/admin/image-search-ai-test/route.ts
+new file mode 100644
+index 0000000..7ae3de8
+--- /dev/null
++++ b/app/api/admin/image-search-ai-test/route.ts
+@@ -0,0 +1,99 @@
++import { NextResponse } from 'next/server';
++import { cookies } from 'next/headers';
++import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
++import { fetchImageSearchAiSettingsServer } from '@/lib/settings-api';
++
++// Admin > Settings > Search by Photo — AI > "Test AI connection" hits this
++// route so the admin can see the REAL upstream status of the NVIDIA vision
++// model used by app/api/image-search/route.ts (bad/missing key, model not
++// enabled on the account, rate limit, network block, etc.) instead of
++// having to upload a real photo through the storefront just to find out
++// whether the feature is actually wired up correctly.
++
++const MODEL = 'meta/llama-3.2-90b-vision-instruct';
++const NIM_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions';
++const TEST_TIMEOUT_MS = 20000;
++
++async function testVisionModel(apiKey: string) {
++  const controller = new AbortController();
++  const timer = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
++  const startedAt = Date.now();
++
++  try {
++    const res = await fetch(NIM_ENDPOINT, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
++      body: JSON.stringify({
++        model: MODEL,
++        // Text-only ping is enough to confirm the key/model/account are all
++        // valid — a real photo isn't needed just to prove connectivity.
++        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
++        temperature: 0,
++        max_tokens: 10,
++      }),
++      signal: controller.signal,
++    });
++
++    const ms = Date.now() - startedAt;
++    const rawText = await res.text();
++    let parsed: any = null;
++    try {
++      parsed = JSON.parse(rawText);
++    } catch {
++      // non-JSON body — keep rawText as-is for the admin to read
++    }
++
++    if (!res.ok) {
++      return {
++        model: MODEL,
++        ok: false,
++        httpStatus: res.status,
++        ms,
++        errorDetail: parsed?.error?.message || parsed?.detail || rawText.slice(0, 500) || `HTTP ${res.status}`,
++      };
++    }
++
++    const reply = parsed?.choices?.[0]?.message?.content?.trim();
++    return { model: MODEL, ok: true, httpStatus: res.status, ms, reply: reply || '(empty reply body)' };
++  } catch (err) {
++    const timedOut = err instanceof Error && err.name === 'AbortError';
++    return {
++      model: MODEL,
++      ok: false,
++      httpStatus: timedOut ? 504 : 0,
++      ms: Date.now() - startedAt,
++      errorDetail: timedOut
++        ? `Timed out after ${TEST_TIMEOUT_MS}ms — either NVIDIA is slow right now, or outbound network to integrate.api.nvidia.com is blocked from this deployment.`
++        : `Network error: ${err instanceof Error ? err.message : String(err)}`,
++    };
++  } finally {
++    clearTimeout(timer);
++  }
++}
++
++export async function POST() {
++  const cookie = cookies().get(ADMIN_SESSION_COOKIE)?.value ?? null;
++  const verified = await verifyAdminToken(cookie);
++  if (!verified.valid) {
++    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  }
++
++  const apiKey = process.env.NVIDIA_API_KEY;
++  if (!apiKey) {
++    return NextResponse.json({
++      keyPresent: false,
++      results: [],
++      summary: 'NVIDIA_API_KEY is not set in this deployment\'s environment variables. Add it (Vercel/Netlify → Project → Environment Variables) and redeploy.',
++    });
++  }
++
++  const settings = await fetchImageSearchAiSettingsServer();
++  const result = await testVisionModel(apiKey);
++
++  return NextResponse.json({
++    keyPresent: true,
++    keyPreview: `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`,
++    imageSearchAiEnabled: settings.enabled,
++    results: [result],
++  });
++}
+diff --git a/components/admin/settings-panel.tsx b/components/admin/settings-panel.tsx
+index 4e411e7..159e8ef 100644
+--- a/components/admin/settings-panel.tsx
++++ b/components/admin/settings-panel.tsx
+@@ -77,6 +77,8 @@ export default function SettingsPanel() {
+ 
+   const [imageSearchAiForm, setImageSearchAiForm] = useState<ImageSearchAiSettings | null>(null);
+   const [savingImageSearchAi, setSavingImageSearchAi] = useState(false);
++  const [testingImageSearchAi, setTestingImageSearchAi] = useState(false);
++  const [imageSearchAiTestResult, setImageSearchAiTestResult] = useState<any>(null);
+ 
+   const [socialForm, setSocialForm] = useState<SocialLinks | null>(null);
+   const [savingSocial, setSavingSocial] = useState(false);
+@@ -225,6 +227,27 @@ export default function SettingsPanel() {
+     }
+   };
+ 
++  const onTestImageSearchAi = async () => {
++    setTestingImageSearchAi(true);
++    setImageSearchAiTestResult(null);
++    try {
++      const res = await fetch('/api/admin/image-search-ai-test', { method: 'POST' });
++      const data = await res.json().catch(() => ({}));
++      setImageSearchAiTestResult(data);
++      if (!data.keyPresent) {
++        toast.error('NVIDIA_API_KEY is missing on this deployment');
++      } else if (data.results?.every((r: any) => r.ok)) {
++        toast.success('AI connection is working');
++      } else {
++        toast.error('AI connection test found a problem — see details below');
++      }
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : 'Test failed');
++    } finally {
++      setTestingImageSearchAi(false);
++    }
++  };
++
+   const onTestAiChat = async () => {
+     setTestingAiChat(true);
+     setAiTestResult(null);
+@@ -1222,10 +1245,51 @@ export default function SettingsPanel() {
+             Enable AI-powered search by photo (uses NVIDIA_API_KEY; falls back to colour match if off)
+           </label>
+ 
+-          <Button type="submit" disabled={savingImageSearchAi} className="mt-2 w-fit bg-primary">
+-            <Save className="mr-1.5 h-4 w-4" />{' '}
+-            {savingImageSearchAi ? 'Saving…' : 'Save Image Search Settings'}
+-          </Button>
++          <div className="mt-2 flex flex-wrap items-center gap-3">
++            <Button type="submit" disabled={savingImageSearchAi} className="w-fit bg-primary">
++              <Save className="mr-1.5 h-4 w-4" />{' '}
++              {savingImageSearchAi ? 'Saving…' : 'Save Image Search Settings'}
++            </Button>
++            <Button
++              type="button"
++              variant="outline"
++              disabled={testingImageSearchAi}
++              onClick={onTestImageSearchAi}
++            >
++              {testingImageSearchAi ? 'Testing…' : 'Test AI connection'}
++            </Button>
++          </div>
++
++          {imageSearchAiTestResult && (
++            <div className="mt-2 grid gap-2 rounded-lg border border-border/60 bg-muted/40 p-4 text-sm">
++              {imageSearchAiTestResult.summary && (
++                <p className="font-medium text-destructive">{imageSearchAiTestResult.summary}</p>
++              )}
++              {imageSearchAiTestResult.keyPresent && (
++                <p className="text-xs text-muted-foreground">
++                  Using key {imageSearchAiTestResult.keyPreview} · Search by photo AI enabled:{' '}
++                  {String(imageSearchAiTestResult.imageSearchAiEnabled)}
++                </p>
++              )}
++              {(imageSearchAiTestResult.results || []).map((r: any) => (
++                <div
++                  key={r.model}
++                  className={`rounded border p-3 ${r.ok ? 'border-emerald-300 bg-emerald-50' : 'border-destructive/40 bg-destructive/5'}`}
++                >
++                  <p className="font-mono text-xs font-semibold">{r.model}</p>
++                  {r.ok ? (
++                    <p className="mt-1 text-xs text-emerald-800">
++                      ✅ Working ({r.ms}ms) — model replied: &quot;{r.reply}&quot;
++                    </p>
++                  ) : (
++                    <p className="mt-1 text-xs text-destructive">
++                      ❌ HTTP {r.httpStatus || 'network error'} ({r.ms}ms) — {r.errorDetail}
++                    </p>
++                  )}
++                </div>
++              ))}
++            </div>
++          )}
+         </form>
+       )}
+ 

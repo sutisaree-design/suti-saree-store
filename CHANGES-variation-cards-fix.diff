@@ -1,0 +1,337 @@
+diff --git a/app/api/admin/analytics/route.ts b/app/api/admin/analytics/route.ts
+index 2247ea8..0319f7f 100644
+--- a/app/api/admin/analytics/route.ts
++++ b/app/api/admin/analytics/route.ts
+@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
+ import { cookies } from 'next/headers';
+ import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
+ import { getSupabaseAdmin } from '@/lib/supabase-admin';
++import { getVariantDisplayName } from '@/lib/variant-display-name';
+ 
+ const REVENUE_STATUSES = ['paid', 'shipped', 'delivered'];
+ const EXCLUDED_ORDER_STATUSES = ['cancelled', 'failed'];
+@@ -300,6 +301,21 @@ export async function GET(req: Request) {
+       }
+     }
+ 
++    // Splitting into one strict row per *tracked* colour (an earlier pass at
++    // this) turned out to lose data on real store traffic: add-to-cart
++    // clicks and completed orders don't always carry `metadata.color` /
++    // `items[].color` the way product-view events reliably do, so most of
++    // a product's real Add to cart / Purchase counts ended up stranded in
++    // a separate "leftover" row far down the list (sorted by impressions),
++    // while the row actually shown at the top read 0 for both. Back to one
++    // row per product -- so Impressions/Add to cart/Begin checkout/
++    // Purchase always add up to the *complete*, correct totals no matter
++    // how consistently colour was tagged on each event type -- but now
++    // clearly labelled with exactly which colour's own photo is being
++    // shown (previously a bare thumbnail with no indication of whether it
++    // was "the product in general" or one specific variant), and every row
++    // always gets a working View link (previously null whenever a product
++    // had at most one colour with recorded activity).
+     const productPerformance = products
+       .map((p) => {
+         const impressions = productViewCounts.get(p.id) ?? 0;
+@@ -307,22 +323,18 @@ export async function GET(req: Request) {
+         const beginCheckout = productCheckoutStartCounts.get(p.id) ?? 0;
+         const purchases = productPurchaseCounts.get(p.id) ?? 0;
+ 
+-        // Pick the best-performing colour for this product, ranked exactly
+-        // like the shop/category popularity sort: Purchase first, then
+-        // Begin checkout, then Add to cart, then Impressions. Only surfaced
+-        // when the product actually has more than one colour with activity
+-        // -- a single-colour product doesn't need a "top variation" badge.
++        // Which colour to represent this row with: whichever colour has
++        // the most activity (ranked Purchase > Begin checkout > Add to
++        // cart > Impressions, same order the rest of this dashboard ranks
++        // "popularity"), shown even when only one colour has any tracked
++        // activity at all -- so the row is never ambiguous about whether
++        // its photo is a specific variant or just a generic default.
+         const byColor = productColorStats.get(p.id);
+-        let topVariant: {
+-          color: string;
+-          image: string | null;
+-          slug: string | null;
+-          impressions: number;
+-          addToCart: number;
+-          beginCheckout: number;
+-          purchases: number;
+-        } | null = null;
+-        if (byColor && byColor.size > 1) {
++        const baseColor = (p.colors ?? [])[0] ?? null;
++        let variantColor: string | null = null;
++        let image = p.images?.[0] ?? null;
++        let slug = p.slug ?? null;
++        if (byColor && byColor.size > 0) {
+           const ranked = Array.from(byColor.values()).sort(
+             (a, b) =>
+               b.purchases - a.purchases ||
+@@ -332,36 +344,36 @@ export async function GET(req: Request) {
+           );
+           const best = ranked[0];
+           const variantMatch = variantLookup.get(p.id)?.get(best.color) ?? null;
+-          const isBaseColor = (p.colors ?? [])[0] === best.color;
+-          topVariant = {
+-            color: best.color,
+-            image: variantMatch?.image ?? (isBaseColor ? p.images?.[0] ?? null : null),
+-            slug: variantMatch?.slug ?? (isBaseColor ? p.slug ?? null : null),
+-            impressions: best.impressions,
+-            addToCart: best.addToCart,
+-            beginCheckout: best.beginCheckout,
+-            purchases: best.purchases,
+-          };
++          const isBaseColor = baseColor === best.color;
++          variantColor = best.color;
++          image = variantMatch?.image ?? (isBaseColor ? p.images?.[0] ?? null : image);
++          // Always keep the base product's own slug as a fallback so
++          // "View" still opens *some* real page even if this exact colour
++          // can't be resolved to its own variant page (e.g. the variant
++          // was since removed from the catalog but old events still
++          // reference its colour name).
++          slug = variantMatch?.slug ?? (isBaseColor ? p.slug ?? null : slug);
+         }
+ 
+         return {
+           productId: p.id,
+-          name: p.name,
+-          slug: p.slug ?? null,
+-          image: p.images?.[0] ?? null,
++          name: variantColor ? getVariantDisplayName(p.name, baseColor, variantColor) : p.name,
++          slug,
++          image,
++          variantColor,
+           impressions,
+           addToCart,
+           beginCheckout,
+           purchases,
+           conversions: purchases,
+           conversionRate: impressions > 0 ? Number(((purchases / impressions) * 100).toFixed(2)) : 0,
+-          topVariant,
+         };
+       })
+       .filter((p) => p.impressions > 0 || p.addToCart > 0 || p.beginCheckout > 0 || p.purchases > 0)
+       .sort((a, b) => b.impressions - a.impressions)
+       .slice(0, 50);
+ 
++
+     return NextResponse.json({
+       summary: {
+         totalRevenue,
+diff --git a/app/category/[slug]/page.tsx b/app/category/[slug]/page.tsx
+index a35b51e..6975887 100644
+--- a/app/category/[slug]/page.tsx
++++ b/app/category/[slug]/page.tsx
+@@ -7,6 +7,7 @@ import { fetchTopVariantMapServer, toJSON } from '@/lib/top-variant-server';
+ import ViewItemListTracker from '@/components/analytics/view-item-list-tracker';
+ import CategoryToolbarGrid from '@/components/category/category-toolbar-grid';
+ import { safeJsonLd } from '@/lib/json-ld';
++import { expandProductVariants } from '@/lib/expand-product-variants';
+ 
+ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+ 
+@@ -111,6 +112,11 @@ export default async function CategoryPage({ params }: Params) {
+   if (!category) notFound();
+ 
+   const categoryProducts = products.filter((p) => p.category === category.name);
++  // Counts every colour card the grid below actually renders (base colour
++  // + each distinct `product_variants` colour), not just the number of
++  // underlying product rows -- otherwise a single product with 10 colours
++  // showed as "1 product" here while the grid rendered 10 cards for it.
++  const displayCount = expandProductVariants(categoryProducts).length;
+   const intro = category.description || fallbackIntro(category.name);
+   const url = `${SITE_URL}/category/${category.slug}`;
+ 
+@@ -178,7 +184,7 @@ export default async function CategoryPage({ params }: Params) {
+         {intro}
+       </p>
+       <p className="mt-1 text-xs text-muted-foreground">
+-        {categoryProducts.length} {categoryProducts.length === 1 ? 'product' : 'products'}
++        {displayCount} {displayCount === 1 ? 'product' : 'products'}
+       </p>
+ 
+       {categoryProducts.length === 0 ? (
+diff --git a/app/shop/shop-content.tsx b/app/shop/shop-content.tsx
+index 850e2b6..7f3b2ec 100644
+--- a/app/shop/shop-content.tsx
++++ b/app/shop/shop-content.tsx
+@@ -81,6 +81,7 @@ function ShopContentInner({
+   // any navigation back to "the current listing page" must use whichever
+   // path we're actually on instead of a hardcoded '/shop'.
+   const pathname = usePathname();
++  const isSearchPage = pathname === '/search';
+ 
+   // Set by the header's "search by image" camera button: it ranks the
+   // catalog by visual similarity client-side (lib/image-search.ts) and
+@@ -374,6 +375,17 @@ function ShopContentInner({
+   const visibleProducts = filtered.slice(0, visibleCount);
+   const hasMore = visibleCount < filtered.length;
+ 
++  // "X pieces found" should match what the grid below actually renders --
++  // mirror its render condition exactly (see the .map() further down).
++  // /search and image-search both render ONE card per matching product
++  // (that product's own matched-colour photo swapped in, not every colour
++  // exploded into its own card -- a "red saree" search showing 7 other
++  // colours of the same design isn't what was searched for). Only the
++  // plain /shop and category grids explode into one card per colour.
++  const displayCount = isSearchPage || imageSearchIds
++    ? filtered.length
++    : expandProductVariants(filtered, listingSettings.max_variant_cards_per_product).length;
++
+   // Log searches for Admin > Analytics > Search -- debounced so a shopper
+   // still typing doesn't fire an event per keystroke, and deduped so the
+   // same query text (e.g. re-rendering after an unrelated filter toggle)
+@@ -608,7 +620,6 @@ function ShopContentInner({
+   // a suggestion), the heading should reflect exactly what was searched
+   // instead of the generic "Shop All Sarees" title -- so it's obvious at
+   // the top of the page which search actually ran.
+-  const isSearchPage = pathname === '/search';
+   const trimmedQuery = query.trim();
+   const showingSearchHeading = isSearchPage && trimmedQuery.length > 0;
+ 
+@@ -669,7 +680,7 @@ function ShopContentInner({
+           )}
+         </h1>
+         <p className="mt-2 text-sm text-muted-foreground">
+-          {filtered.length} {filtered.length === 1 ? 'piece' : 'pieces'} found
++          {displayCount} {displayCount === 1 ? 'piece' : 'pieces'} found
+         </p>
+ 
+         {relatedCategory && (
+diff --git a/components/admin/analytics-panel.tsx b/components/admin/analytics-panel.tsx
+index 9c5a60b..56d4907 100644
+--- a/components/admin/analytics-panel.tsx
++++ b/components/admin/analytics-panel.tsx
+@@ -553,34 +553,32 @@ function SalesPanel({ range, onRangeChange }: { range: SimpleRange; onRangeChang
+                             )}
+                             <div className="min-w-0">
+                               <span className="block max-w-[220px] truncate font-medium">{p.name}</span>
+-                              {p.topVariant && (
+-                                <div className="mt-1 flex items-center gap-1.5">
+-                                  {p.topVariant.image ? (
+-                                    // eslint-disable-next-line @next/next/no-img-element
+-                                    <img
+-                                      src={p.topVariant.image}
+-                                      alt={p.topVariant.color}
+-                                      className="h-4 w-4 rounded-full border border-border/60 object-cover"
+-                                    />
+-                                  ) : (
+-                                    <div className="h-4 w-4 rounded-full border border-border/60 bg-muted" />
+-                                  )}
++                              <div className="mt-1 flex items-center gap-1.5">
++                                {/* Explicit "Colour: X" (rather than a bare
++                                    thumbnail) so it's never ambiguous whether
++                                    the photo above is one specific colour
++                                    variant's own photo or just the product's
++                                    generic default -- when this is blank, no
++                                    colour-level activity has been recorded
++                                    for this product yet, and the photo above
++                                    is the plain default. */}
++                                {p.variantColor && (
+                                   <span className="truncate text-[11px] text-muted-foreground">
+-                                    Top: {p.topVariant.color}
++                                    Colour: {p.variantColor}
+                                   </span>
+-                                  {p.topVariant.slug && (
+-                                    <a
+-                                      href={`/product/${p.topVariant.slug}`}
+-                                      target="_blank"
+-                                      rel="noopener noreferrer"
+-                                      className="ml-0.5 shrink-0 rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-accent"
+-                                      title={`Open the ${p.topVariant.color} variation`}
+-                                    >
+-                                      View →
+-                                    </a>
+-                                  )}
+-                                </div>
+-                              )}
++                                )}
++                                {p.slug && (
++                                  <a
++                                    href={`/product/${p.slug}`}
++                                    target="_blank"
++                                    rel="noopener noreferrer"
++                                    className="shrink-0 rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-accent"
++                                    title={p.variantColor ? `Open the ${p.variantColor} variation` : 'Open this product'}
++                                  >
++                                    View →
++                                  </a>
++                                )}
++                              </div>
+                             </div>
+                           </div>
+                         </td>
+diff --git a/lib/analytics-api.ts b/lib/analytics-api.ts
+index d9dc4dd..1d55c0a 100644
+--- a/lib/analytics-api.ts
++++ b/lib/analytics-api.ts
+@@ -26,24 +26,26 @@ export interface FunnelStage {
+   sessions: number;
+ }
+ 
+-export interface ProductPerformanceTopVariant {
+-  /** Colour name, e.g. "Maroon" */
+-  color: string;
+-  image: string | null;
+-  /** Slug of this exact colour's product page -- null if it can't be resolved. */
+-  slug: string | null;
+-  impressions: number;
+-  addToCart: number;
+-  beginCheckout: number;
+-  purchases: number;
+-}
+-
+ export interface ProductPerformance {
+   productId: string;
+   name: string;
+-  /** Base product's own slug, e.g. for linking the product name/thumbnail. */
++  /** This exact row's own product page -- the top-performing colour
++   *  variant's slug when one is known, the base product's slug otherwise.
++   *  Always populated when a page exists for it, so "View" never silently
++   *  disappears. */
+   slug: string | null;
++  /** The photo shown above -- the top-performing colour's own photo when
++   *  `variantColor` is set, the product's plain default photo otherwise. */
+   image: string | null;
++  /** The colour this row's photo/name/link represent, when any colour-level
++   *  activity has been recorded for this product (ranked Purchase > Begin
++   *  checkout > Add to cart > Impressions, same ranking used elsewhere on
++   *  this dashboard). Null means no colour-level data exists yet -- the
++   *  photo above is just the product's generic default, not any specific
++   *  variant. Impressions/addToCart/beginCheckout/purchases below are
++   *  always the *whole product's* totals across every colour, regardless
++   *  of which colour is highlighted here. */
++  variantColor: string | null;
+   impressions: number;
+   /** sessions that added this product to cart, within the window */
+   addToCart: number;
+@@ -55,11 +57,6 @@ export interface ProductPerformance {
+   purchases: number;
+   conversions: number;
+   conversionRate: number;
+-  /** The best-performing colour variation for this product (ranked Purchase
+-   *  > Begin checkout > Add to cart > Impressions), when the product has
+-   *  more than one colour with recorded activity. Null for single-colour
+-   *  products or when no colour data is available yet. */
+-  topVariant: ProductPerformanceTopVariant | null;
+ }
+ 
+ export interface LowStockProduct {
+diff --git a/lib/settings-api.ts b/lib/settings-api.ts
+index feb47c2..9256402 100644
+--- a/lib/settings-api.ts
++++ b/lib/settings-api.ts
+@@ -839,7 +839,13 @@ export interface CatalogListingSettings {
+ 
+ export const DEFAULT_CATALOG_LISTING_SETTINGS: CatalogListingSettings = {
+   page_size: 24,
+-  max_variant_cards_per_product: 4,
++  // 20 = the same ceiling the admin "Catalog Listing Size" input caps out
++  // at (see components/admin/settings-panel.tsx), i.e. effectively "show
++  // every colour" for any real product -- no saree/kurti in this catalog
++  // comes in more than a handful of colours. Used to default to 4, which
++  // silently hid most of a multi-colour product's variations from the
++  // catalog grid until an admin discovered and raised this setting.
++  max_variant_cards_per_product: 20,
+ };
+ 
+ export async function fetchCatalogListingSettings(): Promise<CatalogListingSettings> {

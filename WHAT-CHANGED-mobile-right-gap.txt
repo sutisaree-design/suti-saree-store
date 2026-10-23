@@ -1,0 +1,75 @@
+MOBILE "RIGHT GAP" FIX -- product page (after Price Filter round 2)
+=====================================================================
+
+ISSUE (jo aapne report kiya):
+Mobile par product page ka right-side gap/padding gayab ho gaya tha,
+aur ye "Shop by Price" price filter add karne ke turant baad shuru hua.
+
+ROOT CAUSE (code check karke confirm kiya):
+- `round2.diff` me jab product page par PriceQuickBrowseBar
+  (Shop by Price chips, Add to Bag/Buy Now ke neeche) add kiya gaya,
+  wo `ProductInfo` component ke andar gaya.
+- `ProductInfo` ka root <div> ek CSS grid column hai
+  (app/product/[slug]/product-detail.tsx me `lg:grid-cols-2` grid ka
+  2nd column). Us div par `min-w-0` class missing thi.
+- PriceQuickBrowseBar ka chip row `overflow-x-auto` + `whitespace-nowrap`
+  use karta hai (scroll karne ke liye, wrap nahi hota). `min-w-0` ke
+  bina, grid apne aap ko is row ke pure content ke barabar chauda kar
+  leta hai -- yani poore page ko thoda zyada wide bana deta hai mobile par.
+- globals.css me html/body par `overflow-x-clip` set hai, to ye extra
+  width dikhta nahi (koi scrollbar nahi aata), bas silently clip ho
+  jaata hai -- aur usi ke saath page ka right-side 16px gutter (jo
+  `container-boutique` class deta hai) bhi clip ho jaata hai.
+- Isi wajah se timing bilkul match karta hai: price filter (round 2)
+  add hote hi ye problem shuru hui.
+- Same left-side column (product gallery) me ye hi `min-w-0` pehle se
+  hai -- isliye wahan koi issue nahi tha, sirf right column
+  (ProductInfo) me missing thi.
+
+FIX (1 line, 1 file):
+File: app/product/[slug]/product-detail.tsx
+`ProductInfo` function ke root div ko:
+    <div className="flex flex-col gap-3">
+se badal kar:
+    <div className="min-w-0 flex flex-col gap-3">
+kar diya (bilkul wahi pattern jo gallery column already use kar raha
+tha). Isse grid column apne content ke andar hi horizontal scroll
+allow karta hai, page ko wide nahi hone deta, aur right-side ka gap
+wapas normal aa jaata hai.
+
+Verified: `npm install` + `npm run typecheck` clean pass (koi TS/JSX
+error nahi).
+
+"ROUND" (Shop by Price pill shape):
+Teeno jagah check ki -- product page bar
+(components/product/price-quick-browse-bar.tsx), shop page bar
+(components/shop/price-range-filter-bar.tsx), aur admin preview
+(components/admin/price-range-filters-panel.tsx) -- sabme chips
+already `rounded-full` use kar rahe hain, jo Tailwind ka sabse zyada
+rounded (full pill/stadium shape) option hai. Code me ye already sahi
+hai, isliye maine ismein kuch badla nahi. Deploy karne ke baad bhi
+agar aapko kam round lage (screenshot bhej dena), to exact us jagah
+ka style adjust kar dunga.
+
+DEPLOYMENT LOGS:
+Netlify/hosting dashboard tak meri direct login access nahi hai, isliye
+wahan se "last 2 deployments" check nahi kar saka. Uske bajaye maine
+repo ke apne change-history (price-filter-update.diff = round 1 [shop
+page + admin panel], round2.diff = round 2 [product page quick-browse
+bar]) se dono changes dekhe -- aur exact bug wahi round 2 me mila (upar
+dekhein).
+
+KAISE APPLY KAREIN (koi bhi ek tarika):
+1) Is zip ke andar wali file seedha isi path par paste/replace kar do:
+   app/product/[slug]/product-detail.tsx
+   (dono jagah 977 line ke aas-paas hi hai)
+   -- phir arm apna normal `git add` + commit + push kar dena.
+
+2) Ya `mobile-right-gap-fix.patch` ko apne project root me daal kar:
+       git apply mobile-right-gap-fix.patch
+   chala do.
+
+NOTE (unrelated, sirf FYI): `npm install` ke waqt yeh warning aayi thi
+ki current Next.js version (13.5.1) me ek known security vulnerability
+hai aur ek patched version available hai. Isse aapka aaj ka fix affect
+nahi karta, bas jab time mile to upgrade consider kar lena.

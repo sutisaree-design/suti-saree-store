@@ -1,0 +1,60 @@
+HOW TO APPLY — Public Referrals, Loyalty & Affiliate pages
+=============================================================
+
+What's inside marketing-public-pages.zip:
+  app/refer-earn/page.tsx           <- NEW — public Refer & Earn page
+  app/refer-earn/layout.tsx         <- NEW — SEO title/description
+  app/loyalty/page.tsx              <- NEW — public Loyalty Rewards page
+  app/loyalty/layout.tsx            <- NEW — SEO title/description
+  app/affiliate-program/page.tsx    <- NEW — public Affiliate Program page
+  app/affiliate-program/layout.tsx  <- NEW — SEO title/description
+  components/footer.tsx             <- CHANGED — links to all three added,
+                                        "Affiliate Program" link now points
+                                        to the new public page instead of
+                                        the login-only /account/affiliate
+
+Steps (Windows, your E-Commerce-ethnic folder):
+  1. Extract marketing-public-pages.zip.
+  2. Copy the "app" folder from the zip into your project's "app" folder
+     — this only ADDS three new subfolders (refer-earn, loyalty,
+     affiliate-program), it won't touch anything else in app/.
+  3. Copy components/footer.tsx from the zip into your project's
+     "components" folder, overwriting the existing footer.tsx.
+  4. In your project folder, run:
+       git add app/refer-earn app/loyalty app/affiliate-program components/footer.tsx
+       git commit -m "Add public Referrals, Loyalty and Affiliate landing pages"
+       git push
+
+New public URLs (no login required to view):
+  yoursite.com/refer-earn
+  yoursite.com/loyalty
+  yoursite.com/affiliate-program
+
+How each one behaves:
+  - Reward/point values shown on /refer-earn and /loyalty are pulled live
+    from your existing Admin settings (Admin > Referrals, Admin > Loyalty).
+    Change the numbers there and the page updates automatically.
+  - The 5% commission shown on /affiliate-program is currently a fixed
+    number in the page (there's no live admin setting for it yet — it
+    matches your database's default commission_percent column). If you
+    ever change that default, update the DEFAULT_COMMISSION_PERCENT
+    constant near the top of app/affiliate-program/page.tsx to match.
+  - If a visitor is logged in, buttons take them straight to their
+    account page (/account/referrals, /account/loyalty, /account/affiliate).
+  - If a visitor is NOT logged in, they see "Log in" / "Create an account"
+    buttons instead — so nobody hits a blocked login-required page from
+    an ad click.
+
+These are now safe to use as Google Ads sitelinks — for example:
+
+  Sitelink text: Loyalty Rewards
+  Description line 1: Earn points on every order
+  Description line 2: Redeem for discounts anytime
+  Final URL: https://www.aruhihandlooms.com/loyalty
+
+  Sitelink text: Become an Affiliate
+  Description line 1: Earn 5% on every order
+  Description line 2: Share your link, get paid
+  Final URL: https://www.aruhihandlooms.com/affiliate-program
+
+Nothing else in your project was touched — only the files listed above.

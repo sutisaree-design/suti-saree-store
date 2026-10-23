@@ -1,0 +1,221 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 8747143..e75a81b 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -5,7 +5,7 @@ import Link from 'next/link';
+ import Image from 'next/image';
+ import { useRouter } from 'next/navigation';
+ import { Lock, Loader2, CreditCard, Tag, X, Wallet, Sparkles, Gift, Store, Minus, Plus } from 'lucide-react';
+-import { useCart, usePaymentDiscount } from '@/lib/cart-context';
++import { useCart, usePaymentDiscount, computeBogoDiscount } from '@/lib/cart-context';
+ import { useAuth } from '@/lib/auth-context';
+ import { formatINR } from '@/lib/format';
+ import { supabase } from '@/lib/supabase';
+@@ -82,6 +82,8 @@ export default function CheckoutPage() {
+     couponDiscount: cartCouponDiscount,
+     applyCoupon,
+     removeCoupon,
++    bogoDiscount: cartBogoDiscount,
++    activePromotions,
+     buyNowItem,
+     updateBuyNowQuantity,
+     clearBuyNow,
+@@ -102,6 +104,12 @@ export default function CheckoutPage() {
+       ? computeCouponDiscount(appliedCoupon, subtotal, items.length)
+       : 0
+     : cartCouponDiscount;
++  // Buy Now checks out with just buyNowItem (+ any local extras), not the persistent cart,
++  // so — same as couponDiscount above — the BOGO discount has to be recomputed against that
++  // item set rather than reused from cart context, which only tracks the real cart.
++  const bogoDiscount = isBuyNow
++    ? computeBogoDiscount(items, activePromotions)
++    : cartBogoDiscount;
+   const [placing, setPlacing] = useState(false);
+   const [orderPlaced, setOrderPlaced] = useState(false);
+   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
+@@ -495,7 +503,9 @@ export default function CheckoutPage() {
+     subtotal >= shippingSettings.free_shipping_threshold
+       ? 0
+       : shippingSettings.flat_rate;
+-  const afterCouponSubtotal = Math.max(0, subtotal - couponDiscount);
++  // Both a coupon and a BOGO promo can be active at once — same as the cart drawer, they're
++  // subtracted independently here rather than one feeding off the other.
++  const afterCouponSubtotal = Math.max(0, subtotal - couponDiscount - bogoDiscount);
+   const clampedGiftCardDiscount = Math.min(giftCardDiscount, afterCouponSubtotal);
+   const afterGiftCardSubtotal = Math.max(0, afterCouponSubtotal - clampedGiftCardDiscount);
+ 
+@@ -1439,6 +1449,12 @@ export default function CheckoutPage() {
+                   <span>-{formatINR(couponDiscount)}</span>
+                 </div>
+               )}
++              {bogoDiscount > 0 && (
++                <div className="flex justify-between text-secondary-foreground">
++                  <span>BOGO offer applied</span>
++                  <span>-{formatINR(bogoDiscount)}</span>
++                </div>
++              )}
+               {clampedGiftCardDiscount > 0 && (
+                 <div className="flex justify-between text-secondary-foreground">
+                   <span>Gift card ({appliedGiftCard?.code})</span>
+diff --git a/components/cart-drawer.tsx b/components/cart-drawer.tsx
+index 38be62b..63f1543 100644
+--- a/components/cart-drawer.tsx
++++ b/components/cart-drawer.tsx
+@@ -48,6 +48,7 @@ export default function CartDrawer() {
+     couponDiscount,
+     applyCoupon,
+     removeCoupon,
++    bogoDiscount,
+     clearBuyNow,
+   } = useCart();
+   const { user } = useAuth();
+@@ -55,7 +56,9 @@ export default function CartDrawer() {
+ 
+   const onlinePaymentSavings =
+     paymentDiscount.enabled && paymentDiscount.percent > 0
+-      ? Math.round((Math.max(0, subtotal - couponDiscount) * paymentDiscount.percent) / 100)
++      ? Math.round(
++          (Math.max(0, subtotal - couponDiscount - bogoDiscount) * paymentDiscount.percent) / 100
++        )
+       : 0;
+ 
+   const [couponInput, setCouponInput] = useState('');
+@@ -211,7 +214,7 @@ export default function CartDrawer() {
+     const mrp = i.product.mrp ?? i.product.price;
+     return sum + Math.max(0, mrp - i.product.price) * i.quantity;
+   }, 0);
+-  const totalSavings = mrpSavings + couponDiscount;
++  const totalSavings = mrpSavings + couponDiscount + bogoDiscount;
+ 
+   return (
+     <Sheet
+@@ -540,7 +543,7 @@ export default function CartDrawer() {
+                   </span>
+                   <span className="flex items-center gap-1.5">
+                     <span className="text-sm font-semibold">
+-                      {formatINR(Math.max(0, subtotal - couponDiscount))}
++                      {formatINR(Math.max(0, subtotal - couponDiscount - bogoDiscount))}
+                     </span>
+                     {priceDetailsOpen ? (
+                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
+@@ -563,10 +566,18 @@ export default function CartDrawer() {
+                         <span>-{formatINR(couponDiscount)}</span>
+                       </div>
+                     )}
++                    {bogoDiscount > 0 && (
++                      <div className="flex items-center justify-between text-secondary-foreground">
++                        <span className="flex items-center gap-1.5">
++                          <Tag className="h-3.5 w-3.5" /> BOGO offer applied
++                        </span>
++                        <span>-{formatINR(bogoDiscount)}</span>
++                      </div>
++                    )}
+                     <Separator />
+                     <div className="flex items-center justify-between font-serif text-base font-bold text-primary">
+                       <span>Total</span>
+-                      <span>{formatINR(Math.max(0, subtotal - couponDiscount))}</span>
++                      <span>{formatINR(Math.max(0, subtotal - couponDiscount - bogoDiscount))}</span>
+                     </div>
+                   </div>
+                 )}
+@@ -589,7 +600,7 @@ export default function CartDrawer() {
+                   <span className="flex items-center gap-2">
+                     <span className="text-muted-foreground line-through">{formatINR(subtotal)}</span>
+                     <span className="font-serif text-base font-bold text-primary">
+-                      {formatINR(Math.max(0, subtotal - couponDiscount))}
++                      {formatINR(Math.max(0, subtotal - couponDiscount - bogoDiscount))}
+                     </span>
+                   </span>
+                 </div>
+diff --git a/lib/cart-context.tsx b/lib/cart-context.tsx
+index ca4b69d..2df551d 100644
+--- a/lib/cart-context.tsx
++++ b/lib/cart-context.tsx
+@@ -12,7 +12,7 @@ import React, {
+ import { CartItem, Product, CategoryRow } from './types';
+ import { fetchProducts, fetchCategories } from './products-api';
+ import { validateCoupon, computeCouponDiscount, Coupon, CouponResult } from './coupons-api';
+-import { ActivePromotion } from './promotions-api';
++import { fetchActivePromotions, ActivePromotion } from './promotions-api';
+ import {
+   fetchPaymentDiscountSettings,
+   PaymentDiscountSettings,
+@@ -53,12 +53,13 @@ const sameLine = (
+   item.size === size &&
+   (color === undefined || itemColor(item.product) === color);
+ 
+-/* ---------------- BOGO promotions (Part 2a — pure logic, not wired yet) ---------------- */
++/* ---------------- BOGO promotions (Part 2a logic, wired into context state in Part 2b) --------- */
+ //
+ // computeBogoDiscount() is intentionally a standalone, side-effect-free function (no hooks,
+-// no context) so it can be unit-tested with plain arrays before Part 2b wires it into
+-// CartContext state and cart-drawer.tsx. It mirrors how computeCouponDiscount() in
+-// coupons-api.ts is also a pure function the reducer/useMemo just calls into.
++// no context) so it can be unit-tested with plain arrays. It mirrors how
++// computeCouponDiscount() in coupons-api.ts is also a pure function the reducer/useMemo just
++// calls into. CartProvider below fetches the active promotions on mount and feeds them (plus
++// the live cart items) into this function via a useMemo, the same way couponDiscount works.
+ //
+ // Algorithm: for each active promotion, take the qualifying cart units (all units of a
+ // product if scope='all', or only units of products in promotion.product_ids if
+@@ -172,6 +173,13 @@ interface CartContextValue {
+   couponDiscount: number;
+   applyCoupon: (code: string, overrideSubtotal?: number, overrideItemCount?: number) => Promise<CouponResult>;
+   removeCoupon: () => void;
++  /** Currently-active BOGO promotions, fetched once on mount — exposed so pages that need to
++   * recompute the discount against a different item set (e.g. checkout's Buy Now flow) can call
++   * computeBogoDiscount() themselves instead of refetching. */
++  activePromotions: ActivePromotion[];
++  /** Rupee amount saved by auto-applied BOGO promotions, recalculated live against the current
++   * cart items — same "always live, never a frozen number" approach as couponDiscount. */
++  bogoDiscount: number;
+   /** Single-item "Buy Now" checkout — set when the customer taps Buy Now on
+    * a product page, kept separate from the persistent cart so it doesn't
+    * pull in whatever else is already sitting in the cart. Checkout reads
+@@ -193,6 +201,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
+   const [hydrated, setHydrated] = useState(false);
+   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+   const [buyNowItem, setBuyNowItem] = useState<CartItem | null>(null);
++  const [activePromotions, setActivePromotions] = useState<ActivePromotion[]>([]);
+ 
+   useEffect(() => {
+     try {
+@@ -227,6 +236,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
+     }
+   }, [state.items, hydrated]);
+ 
++  // Active BOGO promotions — fetched once on mount, same as the payment discount
++  // settings fetch in PaymentDiscountProvider below. fetchActivePromotions() already
++  // fails quiet (returns []) so a promotions outage never breaks the cart.
++  useEffect(() => {
++    fetchActivePromotions().then(setActivePromotions);
++  }, []);
++
+   useEffect(() => {
+     if (!hydrated) return;
+     try {
+@@ -299,6 +315,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
+     return computeCouponDiscount(appliedCoupon, subtotal, state.items.length);
+   }, [appliedCoupon, subtotal, state.items.length]);
+ 
++  // BOGO discount, recomputed live off the current cart items and active promotions —
++  // same "always live, never a frozen number" reasoning as couponDiscount above. A coupon
++  // and a BOGO promo can both be active at once; they're summed independently wherever the
++  // total is calculated (cart drawer, checkout), never nested inside one another here.
++  const bogoDiscount = useMemo(
++    () => computeBogoDiscount(state.items, activePromotions),
++    [state.items, activePromotions]
++  );
++
+   // A coupon that qualified when it was applied can stop qualifying later
+   // purely because the cart changed — e.g. the item that met "orders above
+   // ₹X" gets removed and a cheaper one takes its place. Without this, the
+@@ -390,6 +415,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
+     couponDiscount,
+     applyCoupon,
+     removeCoupon,
++    activePromotions,
++    bogoDiscount,
+     buyNowItem,
+     startBuyNow,
+     updateBuyNowQuantity,

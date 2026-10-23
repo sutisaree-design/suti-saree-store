@@ -1,0 +1,34 @@
+diff --git a/components/checkout/sticky-order-bar.tsx b/components/checkout/sticky-order-bar.tsx
+index 701b080..1727fe7 100644
+--- a/components/checkout/sticky-order-bar.tsx
++++ b/components/checkout/sticky-order-bar.tsx
+@@ -68,6 +68,11 @@ export default function StickyOrderBar({
+           )}
+         </span>
+         <span className="flex items-center gap-1.5">
++          {mrpTotal > payableTotal && (
++            <span className="font-serif text-xs text-muted-foreground line-through sm:text-sm">
++              {formatINR(mrpTotal)}
++            </span>
++          )}
+           <span className="font-serif text-base font-bold text-primary sm:text-lg">
+             {formatINR(payableTotal)}
+           </span>
+@@ -105,8 +110,15 @@ export default function StickyOrderBar({
+                       {item.product.colors?.[0] ? ` · Color: ${item.product.colors[0]}` : ''}
+                     </p>
+                   </div>
+-                  <span className="shrink-0 text-sm font-semibold">
+-                    {formatINR(item.product.price * item.quantity)}
++                  <span className="flex shrink-0 items-baseline gap-1.5">
++                    {item.product.mrp && item.product.mrp > item.product.price && (
++                      <span className="text-xs text-muted-foreground line-through">
++                        {formatINR(item.product.mrp * item.quantity)}
++                      </span>
++                    )}
++                    <span className="text-sm font-semibold">
++                      {formatINR(item.product.price * item.quantity)}
++                    </span>
+                   </span>
+                 </li>
+               );

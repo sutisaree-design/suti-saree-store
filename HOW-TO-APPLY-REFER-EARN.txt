@@ -1,0 +1,31 @@
+HOW TO APPLY — Refer & Earn public page
+========================================
+
+What's inside refer-earn-changes.zip:
+  app/refer-earn/page.tsx     <- NEW public landing page (no login needed to view)
+  app/refer-earn/layout.tsx   <- NEW, sets SEO title/description for that page
+  components/footer.tsx       <- CHANGED, adds a "Refer & Earn" link next to Gift Cards
+
+Steps (Windows, your E-Commerce-ethnic folder):
+  1. Extract refer-earn-changes.zip.
+  2. Copy the "app" folder from the zip into your project's "app" folder
+     — this only ADDS a new "refer-earn" subfolder, it won't touch anything else in app/.
+  3. Copy components/footer.tsx from the zip into your project's "components" folder,
+     overwriting the existing footer.tsx.
+  4. In your project folder, run:
+       git add app/refer-earn components/footer.tsx
+       git commit -m "Add public Refer & Earn landing page"
+       git push
+
+What it does:
+  - New page at yoursite.com/refer-earn — anyone can view it, no login required.
+  - Shows the reward points dynamically, pulled from your existing referral
+    settings (Admin > Referrals). If you change the points there, this page
+    updates automatically — no code change needed.
+  - If a visitor is logged in, the button takes them straight to their
+    referral code (/account/referrals).
+  - If a visitor is NOT logged in, they see "Log in to get my code" and
+    "New here? Create an account" instead — so nobody hits a blocked page.
+  - Added a footer link under "Shop" so it's discoverable from any page.
+
+Nothing else in your project was touched — only these 3 files.

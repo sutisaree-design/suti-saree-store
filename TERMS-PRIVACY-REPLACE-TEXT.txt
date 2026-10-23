@@ -1,0 +1,5 @@
+=== TERMS & CONDITIONS: "Order Confirmation" ka paragraph ye se replace karo ===
+A prepaid order is confirmed once your online payment is successful and you receive an order confirmation email/message from us. A Cash on Delivery (COD) order is confirmed when you confirm it using the link we send by email/WhatsApp, or when our team confirms it with you by phone/WhatsApp; we may hold dispatch of a COD order until it is confirmed and may cancel it if we are unable to confirm it with you within a reasonable time. We reserve the right to cancel any order due to stock unavailability, pricing errors, or suspected fraudulent activity, in which case any amount you have paid will be refunded in full.
+
+=== PRIVACY POLICY: "How We Use Your Information" ki 2nd line ye se replace karo ===
+Communicate with you about your orders (including confirming Cash on Delivery orders by email, WhatsApp, or SMS), account, or customer service requests

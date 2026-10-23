@@ -1,0 +1,61 @@
+HERO BANNER — 4:5/16:6 SIZE + FULL MEDIA SHOW + BLURRED GAP FILL +
+ADVANCE ONLY AFTER VIDEO ENDS + MOBILE AUTOPLAY FIX (v2)
+=====================================================================
+
+Is zip me sirf 1 file hai, apne repo (E-Commerce-ethnic) ke andar EXACT
+same path par copy-paste/replace karo:
+
+  1. components/home/hero-banner-carousel.tsx          (REPLACE)
+
+KYA HAI IS VERSION ME
+------------------------
+1. Slide box ka SIZE bilkul pehle jaisa hi hai — mobile par 4:5, desktop
+   par (sm: se upar) 16:6.
+2. object-contain — box ke andar pura video/image hamesha dikhega, kuch
+   bhi crop nahi hoga.
+3. Ratio match na hone par gap me plain color ki jagah usi photo/video ka
+   zoomed + BLURRED version dikhega.
+4. Video slide apna fixed 5-second timer follow nahi karta — video pura
+   khatam hone ke baad hi khud carousel agli slide par jaata hai.
+5. Image slide bilkul pehle jaisa hi hai.
+6. MOBILE AUTOPLAY FIX v2 (naya, is round ka asli fix):
+   Pichli baar `video.muted = true` set kiya tha, lekin ek aur bug tha —
+   code turant `video.currentTime = 0` set karne ki koshish karta tha,
+   BINA ye check kiye ki video ka metadata load bhi hua hai ya nahi.
+   Mobile Safari me agar metadata load nahi hua ho aur currentTime set
+   karo, to woh line seedha ERROR throw kar deti hai — aur us error ki
+   wajah se us error ke NEECHE wali `video.play()` line kabhi chalti hi
+   nahi thi. Yahi asli reason tha ki autoplay silently fail ho raha tha.
+
+   Ab:
+   - currentTime sirf tabhi set hota hai jab video ka metadata pehle se
+     ready ho (warna naya video element vaise bhi 0 par hi hota hai, to
+     zaroorat nahi).
+   - Agar play() phir bhi kisi wajah se fail ho (jaise data poora load
+     nahi hua), to code khud video ke "canplay" event ka wait karta hai
+     aur us waqt dobara play() try karta hai — matlab ab retry bhi hai.
+
+APPLY KARNE KE STEPS
+---------------------
+1. Upar wali file apne local repo me same path par paste karke
+   overwrite/replace kar do.
+2. git add -A
+   git commit -m "Hero carousel: fix mobile autoplay (currentTime-before-ready bug)"
+   git push
+3. Koi migration/database change nahi hai — sirf ye 1 component file
+   hai, deploy hote hi live ho jaayega.
+4. Apply karne ke baad ASLI MOBILE PHONE par test karna.
+
+AGAR ABHI BHI NA CHALE
+------------------------
+Agar is fix ke baad bhi mobile par autoplay nahi chalta, to ye batana:
+  - Kaunsa phone/browser hai — iPhone (Safari) ya Android (Chrome), ya
+    kisi app ke andar ka browser (jaise Instagram/Facebook se khola)?
+  - Kya poster/pehla frame dikhta hai aur manually tap karne se video
+    chalta hai? (Agar haan, to ye ek ALAG cheez hai — device ki
+    "Low Power Mode" / "Data Saver" setting bhi autoplay block kar
+    sakti hai, jo code se fix nahi ho sakta, sirf phone setting se.)
+Ye info milne se main sahi jagah dhoondh ke fix kar paunga.
+
+Maine local me `tsc --noEmit` aur `next lint` dono chala ke check kar
+liya hai — is file ke against zero errors/warnings.

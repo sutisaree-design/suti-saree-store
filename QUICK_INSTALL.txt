@@ -1,0 +1,43 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║         POPULARITY SORTING FIX - QUICK INSTALLATION                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📦 FILES INCLUDED:
+  ✓ lib/popularity-rank-server.ts (NEW)
+  ✓ app/shop/page.tsx (UPDATED)
+  ✓ app/shop/shop-content.tsx (UPDATED)
+  ✓ app/category/[slug]/page.tsx (UPDATED)
+  ✓ components/category/category-toolbar-grid.tsx (UPDATED)
+
+⚡ 3-STEP INSTALLATION:
+
+1️⃣  Copy Files
+    └─ Extract this ZIP
+    └─ Copy all files to your E-Commerce-ethnic repo
+       (keeping the same directory structure)
+
+2️⃣  Test Locally
+    ├─ npm run dev
+    ├─ Visit http://localhost:3000/shop
+    └─ Check: Products in popularity order (no shift)
+
+3️⃣  Deploy
+    ├─ git add .
+    ├─ git commit -m "feat: show most-viewed products first"
+    └─ git push
+
+✅ VERIFICATION:
+   After deployment, /shop and /category pages should show
+   products in popularity order immediately on load.
+   No visual shifting or reordering after 1-2 seconds.
+
+📝 NOTES:
+   - All database queries remain the same
+   - Only adds one new function to lib/
+   - Requires activity_events table with data
+   - Performance optimized (refresh every 10 min, not per load)
+
+🎯 RESULT:
+   Users see products in correct popularity order from day 1!
+
+═══════════════════════════════════════════════════════════════════════════════

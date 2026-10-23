@@ -1,0 +1,224 @@
+diff --git a/app/shop/shop-content.tsx b/app/shop/shop-content.tsx
+index 431c9aa..0555770 100644
+--- a/app/shop/shop-content.tsx
++++ b/app/shop/shop-content.tsx
+@@ -45,6 +45,7 @@ import {
+   fetchPriceRangeFilters,
+   DEFAULT_PRICE_RANGE_FILTERS,
+   PriceRangeBucket,
++  getAvailablePriceBuckets,
+ } from '@/lib/settings-api';
+ 
+ const CATALOG_VIDEO_PREF_KEY = 'aruhi-catalog-video-enabled';
+@@ -298,7 +299,14 @@ function ShopContentInner({
+   const toggle = (list: string[], value: string) =>
+     list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+ 
+-  const filtered = useMemo(() => {
++  // Same category/size/colour/fabric/occasion/search filters as `filtered`
++  // below, but WITHOUT the price filter itself -- this is what "Shop by
++  // Price" checks each bucket against, so a bucket only shows up when it
++  // actually has a matching product in whatever's currently being browsed
++  // (e.g. only this category's products once a category is selected),
++  // instead of always listing every admin-configured band regardless of
++  // whether anything in view falls into it.
++  const filteredForPriceBuckets = useMemo(() => {
+     let list = [...products];
+     if (selectedCats.length > 0) {
+       list = list.filter((p) => selectedCats.includes(p.category));
+@@ -321,12 +329,38 @@ function ShopContentInner({
+     if (selectedOccasions.length > 0) {
+       list = list.filter((p) => (p.occasion || []).some((o) => selectedOccasions.includes(o)));
+     }
+-    list = list.filter(
+-      (p) => p.price >= priceRange[0] && p.price <= priceRange[1]
+-    );
+     if (query.trim()) {
+       list = list.filter((p) => productMatchesQuery(p, query.trim()).matched);
+     }
++    return list;
++  }, [products, selectedCats, selectedSizes, selectedColors, selectedFabrics, selectedOccasions, query]);
++
++  // Buckets to actually render in the "Shop by Price" bar -- narrowed down
++  // to the ones with at least one matching product for the current
++  // category/filters (see getAvailablePriceBuckets in lib/settings-api.ts).
++  const visiblePriceBuckets = useMemo(
++    () => getAvailablePriceBuckets(priceBuckets, filteredForPriceBuckets),
++    [priceBuckets, filteredForPriceBuckets]
++  );
++
++  // If the category/filters change and the currently-active bucket no
++  // longer has any matching product (e.g. switching from "Sarees" to a
++  // category that has nothing "Under ₹499"), drop back to "All Prices"
++  // instead of silently keeping a filter selected that no longer shows up
++  // as a chip.
++  useEffect(() => {
++    if (activePriceBucketId && !visiblePriceBuckets.some((b) => b.id === activePriceBucketId)) {
++      setActivePriceBucketId(null);
++      setPriceRange([0, 35000]);
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [visiblePriceBuckets]);
++
++  const filtered = useMemo(() => {
++    let list = [...filteredForPriceBuckets];
++    list = list.filter(
++      (p) => p.price >= priceRange[0] && p.price <= priceRange[1]
++    );
+     if (imageSearchIds) {
+       // Visual-similarity order takes over from the regular sort dropdown —
+       // most-similar-first is the whole point of an image search. Other
+@@ -380,7 +414,7 @@ function ShopContentInner({
+         list.sort((a, b) => Number(!!b.featured) - Number(!!a.featured));
+     }
+     return list;
+-  }, [products, selectedCats, selectedSizes, selectedColors, selectedFabrics, selectedOccasions, priceRange, query, sort, imageSearchIds, popularityRank]);
++  }, [filteredForPriceBuckets, priceRange, sort, imageSearchIds, popularityRank]);
+ 
+   const activeCount =
+     selectedCats.length +
+@@ -824,7 +858,7 @@ function ShopContentInner({
+         </div>
+ 
+         <PriceRangeFilterBar
+-          ranges={priceBuckets}
++          ranges={visiblePriceBuckets}
+           activeId={activePriceBucketId}
+           onSelect={handlePriceBucketSelect}
+           className="mt-4"
+diff --git a/components/category/category-toolbar-grid.tsx b/components/category/category-toolbar-grid.tsx
+index ed0cf12..b591884 100644
+--- a/components/category/category-toolbar-grid.tsx
++++ b/components/category/category-toolbar-grid.tsx
+@@ -10,7 +10,16 @@ import QuickNavIcons from '@/components/quick-nav-icons';
+ import { Button } from '@/components/ui/button';
+ import { Label } from '@/components/ui/label';
+ import { Switch } from '@/components/ui/switch';
+-import { fetchCatalogVideoSettings, fetchCatalogListingSettings, DEFAULT_CATALOG_LISTING_SETTINGS } from '@/lib/settings-api';
++import {
++  fetchCatalogVideoSettings,
++  fetchCatalogListingSettings,
++  DEFAULT_CATALOG_LISTING_SETTINGS,
++  fetchPriceRangeFilters,
++  DEFAULT_PRICE_RANGE_FILTERS,
++  PriceRangeBucket,
++  getAvailablePriceBuckets,
++} from '@/lib/settings-api';
++import PriceRangeFilterBar from '@/components/shop/price-range-filter-bar';
+ import {
+   Select,
+   SelectContent,
+@@ -55,6 +64,47 @@ export default function CategoryToolbarGrid({
+   initialTopVariants = {},
+ }: CategoryToolbarGridProps) {
+   const [sort, setSort] = useState<SortKey>('popularity');
++
++  // "Shop by Price" chip bar -- same admin-managed buckets as /shop (Admin
++  // > Catalog > Price Filters), but narrowed to only the bands that have a
++  // matching product within THIS category (see getAvailablePriceBuckets in
++  // lib/settings-api.ts), so a category page never offers a price band
++  // that would leave it empty. Picking a chip filters this page's own grid
++  // client-side -- it doesn't hand off to /shop.
++  const [priceBuckets, setPriceBuckets] = useState<PriceRangeBucket[]>(DEFAULT_PRICE_RANGE_FILTERS);
++  const [activePriceBucketId, setActivePriceBucketId] = useState<string | null>(null);
++  useEffect(() => {
++    let cancelled = false;
++    fetchPriceRangeFilters()
++      .then((ranges) => {
++        if (!cancelled) setPriceBuckets(ranges);
++      })
++      .catch(() => {});
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++  const visiblePriceBuckets = useMemo(
++    () => getAvailablePriceBuckets(priceBuckets, products),
++    [priceBuckets, products]
++  );
++  // If the category's product list changes (or on first load) and the
++  // active bucket no longer has anything in it, fall back to "All Prices"
++  // instead of silently filtering to an empty grid.
++  useEffect(() => {
++    if (activePriceBucketId && !visiblePriceBuckets.some((b) => b.id === activePriceBucketId)) {
++      setActivePriceBucketId(null);
++    }
++  }, [visiblePriceBuckets, activePriceBucketId]);
++  const activePriceBucket = visiblePriceBuckets.find((b) => b.id === activePriceBucketId) || null;
++  const handlePriceBucketSelect = (bucket: PriceRangeBucket | null) => {
++    setActivePriceBucketId(bucket ? bucket.id : null);
++  };
++  const priceFilteredProducts = useMemo(() => {
++    if (!activePriceBucket) return products;
++    return products.filter((p) => p.price >= activePriceBucket.min && p.price <= activePriceBucket.max);
++  }, [products, activePriceBucket]);
++
+   const [popularityRank, setPopularityRank] = useState<Map<string, number>>(initialPopularityRank);
+   const [topVariants, setTopVariants] = useState<Record<string, { color: string; image: string | null; slug: string | null }>>(
+     initialTopVariants
+@@ -113,7 +163,7 @@ export default function CategoryToolbarGrid({
+   };
+ 
+   const sorted = useMemo(() => {
+-    const list = [...products];
++    const list = [...priceFilteredProducts];
+     switch (sort) {
+       case 'price-asc':
+         list.sort((a, b) => a.price - b.price);
+@@ -143,7 +193,7 @@ export default function CategoryToolbarGrid({
+         list.sort((a, b) => Number(!!b.featured) - Number(!!a.featured));
+     }
+     return list;
+-  }, [products, sort, popularityRank]);
++  }, [priceFilteredProducts, sort, popularityRank]);
+ 
+   // Admin > Settings > Catalog Listing Size -- how many cards load per
+   // page/batch, and how many colour cards one product may contribute to
+@@ -172,7 +222,7 @@ export default function CategoryToolbarGrid({
+   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+   useEffect(() => {
+     setVisibleCount(PAGE_SIZE);
+-  }, [sort, PAGE_SIZE]);
++  }, [sort, PAGE_SIZE, activePriceBucketId]);
+   const visibleProducts = sorted.slice(0, visibleCount);
+   const hasMore = visibleCount < sorted.length;
+ 
+@@ -238,6 +288,13 @@ export default function CategoryToolbarGrid({
+         </div>
+       </div>
+ 
++      <PriceRangeFilterBar
++        ranges={visiblePriceBuckets}
++        activeId={activePriceBucketId}
++        onSelect={handlePriceBucketSelect}
++        className="mt-4"
++      />
++
+       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+         {expandProductVariants(visibleProducts, listingSettings.max_variant_cards_per_product).map((p, i) => {
+           // Show this product's best-performing colour instead of always
+diff --git a/lib/settings-api.ts b/lib/settings-api.ts
+index c0efe69..107f3fa 100644
+--- a/lib/settings-api.ts
++++ b/lib/settings-api.ts
+@@ -952,3 +952,20 @@ export async function savePriceRangeFilters(ranges: PriceRangeBucket[]) {
+     .upsert({ key: 'price_range_filters', value: { ranges } }, { onConflict: 'key' });
+   if (error) throw error;
+ }
++
++/**
++ * Narrows the admin-managed bucket list down to only the buckets that have
++ * at least one matching product in `products` -- so "Shop by Price" never
++ * shows a band like "₹899 - ₹1000" on a category (or filtered view) that
++ * has nothing in it. Pass whatever product set is currently on screen
++ * (e.g. category-filtered, or /shop's other active filters applied) --
++ * this only checks price, it doesn't re-apply any other filter itself.
++ */
++export function getAvailablePriceBuckets<T extends { price: number }>(
++  buckets: PriceRangeBucket[],
++  products: T[]
++): PriceRangeBucket[] {
++  return buckets.filter((bucket) =>
++    products.some((p) => p.price >= bucket.min && p.price <= bucket.max)
++  );
++}

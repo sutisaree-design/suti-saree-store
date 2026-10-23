@@ -1,0 +1,42 @@
+diff --git a/app/api/products/popularity/route.ts b/app/api/products/popularity/route.ts
+index 3bf0147..605f110 100644
+--- a/app/api/products/popularity/route.ts
++++ b/app/api/products/popularity/route.ts
+@@ -1,5 +1,5 @@
+ import { NextResponse } from 'next/server';
+-import { getServerSupabase } from '@/lib/supabase-server';
++import { getSupabaseAdmin } from '@/lib/supabase-admin';
+ 
+ /**
+  * GET /api/products/popularity
+@@ -33,7 +33,7 @@ interface ProductActivityCounts {
+ 
+ export async function GET() {
+   try {
+-    const supabase = getServerSupabase();
++    const supabase = getSupabaseAdmin();
+ 
+     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+ 
+diff --git a/lib/popularity-rank-server.ts b/lib/popularity-rank-server.ts
+index e7f1fb2..7a77391 100644
+--- a/lib/popularity-rank-server.ts
++++ b/lib/popularity-rank-server.ts
+@@ -12,7 +12,7 @@
+  * then Add to cart.
+  */
+ 
+-import { getServerSupabase } from '@/lib/supabase-server';
++import { getSupabaseAdmin } from '@/lib/supabase-admin';
+ 
+ interface ProductActivityCounts {
+   purchase: number;
+@@ -23,7 +23,7 @@ interface ProductActivityCounts {
+ 
+ export async function fetchPopularityRankServer(): Promise<Map<string, number>> {
+   try {
+-    const supabase = getServerSupabase();
++    const supabase = getSupabaseAdmin();
+ 
+     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+ 

@@ -1,0 +1,742 @@
+diff --git a/app/account/orders/[id]/page.tsx b/app/account/orders/[id]/page.tsx
+index 430433c..71f7916 100644
+--- a/app/account/orders/[id]/page.tsx
++++ b/app/account/orders/[id]/page.tsx
+@@ -1,7 +1,7 @@
+ import { notFound } from 'next/navigation';
+ import Image from 'next/image';
+ import Link from 'next/link';
+-import { PackageCheck, CreditCard } from 'lucide-react';
++import { PackageCheck, CreditCard, Download } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
+ import { getSupabaseServer, getCurrentUser } from '@/lib/supabase-server-auth';
+ import { formatINR } from '@/lib/format';
+@@ -56,6 +56,11 @@ export default async function OrderDetailPage({ params }: { params: { id: string
+         </div>
+         <div className="flex flex-col items-end gap-2">
+           <Badge className="bg-muted text-foreground">{order.status}</Badge>
++          <Button asChild size="sm" variant="outline" className="gap-1.5">
++            <a href={`/api/invoice/${order.id}`} download>
++              <Download className="h-3.5 w-3.5" /> Download Invoice
++            </a>
++          </Button>
+           <CancelOrHelp
+             orderId={order.id}
+             orderShortId={order.id.slice(0, 8).toUpperCase()}
+@@ -198,6 +203,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
+               <br />
+               {order.shipping_address.address}
+               {order.shipping_address.address2 ? `, ${order.shipping_address.address2}` : ''}
++              {order.shipping_address.landmark ? ` (Near ${order.shipping_address.landmark})` : ''}
+               <br />
+               {order.shipping_address.city}, {order.shipping_address.state} -{' '}
+               {order.shipping_address.pincode}
+diff --git a/app/account/orders/page.tsx b/app/account/orders/page.tsx
+index 7a79099..c9fc300 100644
+--- a/app/account/orders/page.tsx
++++ b/app/account/orders/page.tsx
+@@ -1,6 +1,6 @@
+ import Link from 'next/link';
+ import Image from 'next/image';
+-import { Package, TrendingUp } from 'lucide-react';
++import { Package, TrendingUp, Download } from 'lucide-react';
+ import { getSupabaseServer, getCurrentUser } from '@/lib/supabase-server-auth';
+ import { formatINR } from '@/lib/format';
+ import { Badge } from '@/components/ui/badge';
+@@ -149,7 +149,12 @@ export default async function OrdersPage() {
+                   </div>
+                 )}
+ 
+-                <div className="mt-3 flex justify-end">
++                <div className="mt-3 flex justify-end gap-2">
++                  <Button asChild size="sm" variant="outline" className="gap-1.5">
++                    <a href={`/api/invoice/${order.id}`} download>
++                      <Download className="h-3.5 w-3.5" /> Download Invoice
++                    </a>
++                  </Button>
+                   <Button asChild size="sm" variant="outline">
+                     <Link href={`/account/orders/${order.id}`}>View Order</Link>
+                   </Button>
+diff --git a/app/api/vendor/orders/[itemId]/pickup-slip/route.ts b/app/api/vendor/orders/[itemId]/pickup-slip/route.ts
+new file mode 100644
+index 0000000..30b7ed0
+--- /dev/null
++++ b/app/api/vendor/orders/[itemId]/pickup-slip/route.ts
+@@ -0,0 +1,96 @@
++import { NextRequest, NextResponse } from 'next/server';
++import { getCurrentUser, getSupabaseServer } from '@/lib/supabase-server-auth';
++import { getSupabaseAdmin } from '@/lib/supabase-admin';
++import { DEFAULT_DELHIVERY_SETTINGS, type DelhiverySettings } from '@/lib/delhivery-api';
++import { generateVendorPickupSlipPdf } from '@/lib/vendor-pickup-slip-pdf';
++
++// ---------------------------------------------------------------------
++// Vendor Pickup Slip download -- NOT a customer invoice. A vendor ships
++// stock TO our warehouse, never to the end customer, so this route only
++// ever selects order_items columns (never a join into `orders` for
++// customer_name/email/phone/shipping_address) -- same query-level
++// masking guarantee as app/api/vendor/orders/route.ts. "Ship To" on the
++// generated PDF is always OUR warehouse (Admin -> Settings -> Delhivery
++// pickup location), never the customer's address.
++// ---------------------------------------------------------------------
++
++export async function GET(_req: NextRequest, { params }: { params: { itemId: string } }) {
++  const user = await getCurrentUser();
++  if (!user) {
++    return NextResponse.json({ error: 'Please log in first' }, { status: 401 });
++  }
++
++  const authedSupabase = await getSupabaseServer();
++  const { data: vendor, error: vendorErr } = await authedSupabase
++    .from('vendors')
++    .select('id, business_name, status')
++    .eq('user_id', user.id)
++    .maybeSingle();
++  if (vendorErr) {
++    return NextResponse.json({ error: vendorErr.message }, { status: 500 });
++  }
++  if (!vendor) {
++    return NextResponse.json({ error: 'No vendor profile found for this account' }, { status: 403 });
++  }
++  if (vendor.status === 'suspended') {
++    return NextResponse.json({ error: 'Your vendor account has been suspended' }, { status: 403 });
++  }
++
++  const admin = getSupabaseAdmin();
++  // Explicit column list, order_items only -- see masking note above.
++  const { data: item, error: itemErr } = await admin
++    .from('order_items')
++    .select('id, order_id, vendor_id, product_name, barcode, quantity, price, created_at')
++    .eq('id', params.itemId)
++    .maybeSingle();
++
++  if (itemErr) {
++    return NextResponse.json({ error: itemErr.message }, { status: 500 });
++  }
++  if (!item || item.vendor_id !== vendor.id) {
++    // Also covers "not this vendor's item" -- returned as 404, not 403,
++    // so it doesn't confirm/deny that some other vendor's item exists.
++    return NextResponse.json({ error: 'Item not found' }, { status: 404 });
++  }
++
++  const [warehouseSetting, storeSetting] = await Promise.all([
++    admin.from('settings').select('value').eq('key', 'delhivery').maybeSingle(),
++    admin.from('settings').select('value').eq('key', 'store_info').maybeSingle(),
++  ]);
++  const warehouse: DelhiverySettings = {
++    ...DEFAULT_DELHIVERY_SETTINGS,
++    ...((warehouseSetting.data?.value as Partial<DelhiverySettings>) || {}),
++  };
++  const store = (storeSetting.data?.value as Record<string, string>) || {};
++
++  const pdfBytes = await generateVendorPickupSlipPdf(
++    {
++      order_item_id: item.id,
++      order_id: item.order_id,
++      product_name: item.product_name,
++      barcode: item.barcode,
++      quantity: item.quantity,
++      price: item.price,
++      created_at: item.created_at,
++    },
++    {
++      name: warehouse.pickup_location_name,
++      address: warehouse.pickup_address,
++      city: warehouse.pickup_city,
++      state: warehouse.pickup_state,
++      pincode: warehouse.pickup_pincode,
++      phone: warehouse.pickup_phone,
++    },
++    { name: vendor.business_name, id: vendor.id },
++    store
++  );
++
++  return new NextResponse(Buffer.from(pdfBytes), {
++    status: 200,
++    headers: {
++      'Content-Type': 'application/pdf',
++      'Content-Disposition': `attachment; filename="pickup-slip-${item.id.slice(0, 8)}.pdf"`,
++      'Cache-Control': 'no-store',
++    },
++  });
++}
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 16c35c9..727a830 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -196,11 +196,13 @@ export default function CheckoutPage() {
+   const [shipPhone, setShipPhone] = useState('');
+   const [addressLine1, setAddressLine1] = useState('');
+   const [addressLine2, setAddressLine2] = useState('');
++  const [landmark, setLandmark] = useState('');
+   const [city, setCity] = useState('');
+   const [stateName, setStateName] = useState('');
+   const [pincode, setPincode] = useState('');
+   const [country, setCountry] = useState('India');
+   const [deliveryEstimate, setDeliveryEstimate] = useState<PincodeResult | null>(null);
++  const [verifyingPincode, setVerifyingPincode] = useState(false);
+   // Tracks whether the current city/state values were filled in by us (from
+   // the pincode lookup) rather than typed by the shopper, so the auto-fill
+   // effect below never clobbers something they entered by hand. Reset to
+@@ -243,6 +245,7 @@ export default function CheckoutPage() {
+           shipPhone,
+           addressLine1,
+           addressLine2,
++          landmark,
+           city,
+           stateName,
+           pincode,
+@@ -294,6 +297,7 @@ export default function CheckoutPage() {
+         shipPhone: string;
+         addressLine1: string;
+         addressLine2: string;
++        landmark: string;
+         city: string;
+         stateName: string;
+         pincode: string;
+@@ -312,6 +316,7 @@ export default function CheckoutPage() {
+       setShipPhone(draft.shipPhone || '');
+       setAddressLine1(draft.addressLine1 || '');
+       setAddressLine2(draft.addressLine2 || '');
++      setLandmark(draft.landmark || '');
+       setCity(draft.city || '');
+       setStateName(draft.stateName || '');
+       setPincode(draft.pincode || '');
+@@ -333,6 +338,10 @@ export default function CheckoutPage() {
+     setShipPhone(addr.phone || '');
+     setAddressLine1(addr.line1 || '');
+     setAddressLine2(addr.line2 || '');
++    // Saved addresses don't store a landmark, so clear any leftover value
++    // from a previous manual entry rather than leaving it stuck on this
++    // different address.
++    setLandmark('');
+     // These are the customer's own saved values, not a pincode-lookup guess
+     // — mark them as "manual" so the pincode auto-fill effect doesn't
+     // silently swap them out.
+@@ -355,6 +364,7 @@ export default function CheckoutPage() {
+       setShipPhone('');
+       setAddressLine1('');
+       setAddressLine2('');
++      setLandmark('');
+       setCity('');
+       setStateName('');
+       setPincode('');
+@@ -386,6 +396,7 @@ export default function CheckoutPage() {
+       setShipPhone('');
+       setAddressLine1('');
+       setAddressLine2('');
++      setLandmark('');
+       setCity('');
+       setStateName('');
+       setPincode('');
+@@ -500,12 +511,15 @@ export default function CheckoutPage() {
+   useEffect(() => {
+     if (!/^[1-9][0-9]{5}$/.test(pincode.trim())) {
+       setDeliveryEstimate(null);
++      setVerifyingPincode(false);
+       return;
+     }
+     let cancelled = false;
++    setVerifyingPincode(true);
+     checkPincodeServiceability(pincode).then((res) => {
+       if (cancelled) return;
+       setDeliveryEstimate(res);
++      setVerifyingPincode(false);
+       // Auto-fill City & State from the pincode — free, via the same India
+       // Post lookup (api.postalpincode.in) already used for the delivery
+       // estimate above, no extra API/key needed. Only overwrite a field if
+@@ -926,6 +940,26 @@ export default function CheckoutPage() {
+       return;
+     }
+ 
++    // Format-valid isn't the same as REAL -- "411111" or a transposed
++    // digit can look like a valid 6-digit PIN but not correspond to any
++    // actual post office. Confirm existence against India Post's real
++    // database before letting the order through (reuses the estimate
++    // already fetched by the effect above when it matches the current
++    // pincode, so this is usually instant with no extra network call).
++    let pincodeCheck = deliveryEstimate;
++    if (!pincodeCheck || pincodeCheck.pincode !== pincode.trim()) {
++      setVerifyingPincode(true);
++      pincodeCheck = await checkPincodeServiceability(pincode);
++      setDeliveryEstimate(pincodeCheck);
++      setVerifyingPincode(false);
++    }
++    if (pincodeCheck.verified === 'no') {
++      toast.error("This PIN code doesn't exist. Please double-check it and try again.");
++      return;
++    }
++    // verified === 'unknown' (India Post API was unreachable) -> don't
++    // block; we simply couldn't confirm either way.
++
+     const customerName = `${firstName} ${lastName}`.trim();
+     // Normalize to lowercase/trimmed so this always matches the email a
+     // customer later logs in with (Supabase Auth stores emails lowercase;
+@@ -935,6 +969,7 @@ export default function CheckoutPage() {
+     const shippingAddress = {
+       address: addressLine1,
+       address2: addressLine2,
++      landmark: landmark.trim() || undefined,
+       city,
+       state: stateName,
+       pincode,
+@@ -1327,7 +1362,8 @@ export default function CheckoutPage() {
+                 <p className="text-muted-foreground">{email}</p>
+                 <p className="text-muted-foreground">
+                   {addressLine1}
+-                  {addressLine2 ? `, ${addressLine2}` : ''}, {city}, {stateName} - {pincode}
++                  {addressLine2 ? `, ${addressLine2}` : ''}
++                  {landmark ? ` (Near ${landmark})` : ''}, {city}, {stateName} - {pincode}
+                   {country ? `, ${country}` : ''}
+                 </p>
+               </div>
+@@ -1425,6 +1461,19 @@ export default function CheckoutPage() {
+                   onChange={(e) => setAddressLine2(e.target.value)}
+                 />
+               </div>
++              <div className="grid gap-1.5">
++                <Label htmlFor="landmark">Landmark (optional)</Label>
++                <Input
++                  id="landmark"
++                  name="landmark"
++                  placeholder="Near City Hospital / Opposite SBI Bank"
++                  value={landmark}
++                  onChange={(e) => setLandmark(e.target.value)}
++                />
++                <p className="text-[11px] text-muted-foreground">
++                  Helps our delivery partner find your address faster.
++                </p>
++              </div>
+               <div className="grid gap-1.5">
+                 <Label htmlFor="pincode">PIN code *</Label>
+                 <Input
+@@ -1435,6 +1484,11 @@ export default function CheckoutPage() {
+                   placeholder="400050"
+                   inputMode="numeric"
+                   value={pincode}
++                  className={
++                    deliveryEstimate?.pincode === pincode.trim() && deliveryEstimate.verified === 'no'
++                      ? 'border-red-400 focus-visible:ring-red-400'
++                      : undefined
++                  }
+                   onChange={(e) => {
+                     // Typing a new pincode is a clear signal the shopper
+                     // wants fresh City/State for THIS pincode — so let the
+@@ -1446,6 +1500,23 @@ export default function CheckoutPage() {
+                     setPincode(e.target.value);
+                   }}
+                 />
++                {verifyingPincode && (
++                  <p className="text-[11px] text-muted-foreground">Checking pincode…</p>
++                )}
++                {!verifyingPincode && deliveryEstimate?.pincode === pincode.trim() && (
++                  <>
++                    {deliveryEstimate.verified === 'yes' && (
++                      <p className="text-[11px] font-medium text-emerald-600">
++                        ✓ Verified: {deliveryEstimate.city}, {deliveryEstimate.state}
++                      </p>
++                    )}
++                    {deliveryEstimate.verified === 'no' && (
++                      <p className="text-[11px] font-medium text-red-600">
++                        This PIN code doesn't seem to exist. Please double-check it.
++                      </p>
++                    )}
++                  </>
++                )}
+                 {deliveryEstimate?.serviceable && (city || stateName) && (
+                   <p className="text-[11px] text-muted-foreground">
+                     Auto-filled City/State below — you can edit if needed.
+diff --git a/app/order-confirmation/[id]/page.tsx b/app/order-confirmation/[id]/page.tsx
+index 66b8361..7e34325 100644
+--- a/app/order-confirmation/[id]/page.tsx
++++ b/app/order-confirmation/[id]/page.tsx
+@@ -115,6 +115,7 @@ export default async function OrderConfirmationPage({ params }: { params: { id:
+   const addr = order.shipping_address as {
+     address?: string;
+     address2?: string;
++    landmark?: string;
+     city?: string;
+     state?: string;
+     pincode?: string;
+@@ -230,7 +231,7 @@ export default async function OrderConfirmationPage({ params }: { params: { id:
+           <h2 className="font-serif text-lg font-semibold text-primary">Order Summary</h2>
+           <Button asChild variant="outline" size="sm" className="gap-2">
+             <a href={`/api/invoice/${order.id}`} download>
+-              <Download className="h-3.5 w-3.5" /> Download GST Invoice
++              <Download className="h-3.5 w-3.5" /> Download Invoice
+             </a>
+           </Button>
+         </div>
+@@ -317,6 +318,7 @@ export default async function OrderConfirmationPage({ params }: { params: { id:
+               {order.customer_name}
+               <br />
+               {[addr.address, addr.address2].filter(Boolean).join(', ')}
++              {addr.landmark ? ` (Near ${addr.landmark})` : ''}
+               <br />
+               {[addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')}
+               <br />
+@@ -391,7 +393,7 @@ export default async function OrderConfirmationPage({ params }: { params: { id:
+         </div>
+         <div className="col-span-2 flex flex-col items-center gap-1 sm:col-span-1">
+           <Download className="h-5 w-5 text-secondary" />
+-          <span className="text-[11px] font-medium">GST Invoice available above</span>
++          <span className="text-[11px] font-medium">Invoice available above</span>
+         </div>
+       </div>
+ 
+diff --git a/app/vendor/dashboard/orders/page.tsx b/app/vendor/dashboard/orders/page.tsx
+index 49c6bd3..1f8debe 100644
+--- a/app/vendor/dashboard/orders/page.tsx
++++ b/app/vendor/dashboard/orders/page.tsx
+@@ -12,6 +12,7 @@ import {
+   Truck,
+   Camera,
+   Clock,
++  Download,
+ } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
+ import { Badge } from '@/components/ui/badge';
+@@ -188,6 +189,14 @@ function OrderCard({
+         <span>Ship to: {warehouseAddress || 'Warehouse address not configured yet'}</span>
+       </div>
+ 
++      <div className="mt-2">
++        <Button size="sm" variant="outline" className="gap-1.5 text-xs" asChild>
++          <a href={`/api/vendor/orders/${item.id}/pickup-slip`} download>
++            <Download className="h-3.5 w-3.5" /> Download Pickup Slip
++          </a>
++        </Button>
++      </div>
++
+       <div className="mt-3 flex flex-wrap gap-2">
+         {item.stage === 'placed' && (
+           <>
+diff --git a/components/admin/orders-panel.tsx b/components/admin/orders-panel.tsx
+index 13e9ed1..44179cc 100644
+--- a/components/admin/orders-panel.tsx
++++ b/components/admin/orders-panel.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useEffect, useMemo, useState } from 'react';
+ import Link from 'next/link';
+-import { Loader2, Truck, Search, X, Copy, Check, Trash2, ExternalLink, Wallet } from 'lucide-react';
++import { Loader2, Truck, Search, X, Copy, Check, Trash2, ExternalLink, Wallet, Download } from 'lucide-react';
+ import { formatINR } from '@/lib/format';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+@@ -772,7 +772,14 @@ function OrderRow({
+           )}
+         </td>
+         <td className="px-4 py-3 align-top text-sm">
+-          <Button size="sm" onClick={() => setOpen((v) => !v)}>{open ? 'Hide' : 'View'}</Button>
++          <div className="flex flex-col items-start gap-1.5">
++            <Button size="sm" onClick={() => setOpen((v) => !v)}>{open ? 'Hide' : 'View'}</Button>
++            <Button size="sm" variant="outline" className="gap-1" asChild>
++              <a href={`/api/invoice/${order.id}`} download>
++                <Download className="h-3.5 w-3.5" /> Invoice
++              </a>
++            </Button>
++          </div>
+         </td>
+       </tr>
+       {open && (
+diff --git a/lib/delhivery-api.ts b/lib/delhivery-api.ts
+index a673261..1c94df9 100644
+--- a/lib/delhivery-api.ts
++++ b/lib/delhivery-api.ts
+@@ -109,6 +109,7 @@ export interface OrderForShipment {
+   shipping_address?: {
+     address?: string;
+     address2?: string;
++    landmark?: string;
+     city?: string;
+     state?: string;
+     pincode?: string;
+@@ -226,7 +227,9 @@ export async function createDelhiveryShipment(
+     shipments: [
+       {
+         name: order.customer_name || 'Customer',
+-        add: [addr?.address, addr?.address2].filter(Boolean).join(', '),
++        add: [addr?.address, addr?.address2, addr?.landmark ? `Landmark: ${addr.landmark}` : undefined]
++          .filter(Boolean)
++          .join(', '),
+         city: addr?.city || '',
+         state: addr?.state || '',
+         country: addr?.country || 'India',
+@@ -290,6 +293,7 @@ export interface OrderForPickup {
+   shipping_address?: {
+     address?: string;
+     address2?: string;
++    landmark?: string;
+     city?: string;
+     state?: string;
+     pincode?: string;
+@@ -354,7 +358,9 @@ export async function createDelhiveryReversePickup(
+       {
+         // Where the parcel is picked up FROM — the customer.
+         name: order.customer_name || 'Customer',
+-        add: [addr?.address, addr?.address2].filter(Boolean).join(', '),
++        add: [addr?.address, addr?.address2, addr?.landmark ? `Landmark: ${addr.landmark}` : undefined]
++          .filter(Boolean)
++          .join(', '),
+         city: addr?.city || '',
+         state: addr?.state || '',
+         country: addr?.country || 'India',
+diff --git a/lib/invoice-pdf.ts b/lib/invoice-pdf.ts
+index ddce1b2..02b3cb2 100644
+--- a/lib/invoice-pdf.ts
++++ b/lib/invoice-pdf.ts
+@@ -17,6 +17,7 @@ interface InvoiceOrder {
+   shipping_address: {
+     address?: string;
+     address2?: string;
++    landmark?: string;
+     city?: string;
+     state?: string;
+     pincode?: string;
+@@ -113,6 +114,10 @@ export async function generateInvoicePdf(order: InvoiceOrder, store: StoreInfo):
+       draw(line1, margin, y, { size: 9, color: muted });
+       y -= 12;
+     }
++    if (addr.landmark) {
++      draw(`Landmark: ${addr.landmark}`, margin, y, { size: 9, color: muted });
++      y -= 12;
++    }
+     const line2 = [addr.city, addr.state, addr.pincode].filter(Boolean).join(', ');
+     if (line2) {
+       draw(line2, margin, y, { size: 9, color: muted });
+diff --git a/lib/pincode-api.ts b/lib/pincode-api.ts
+index 4d26257..a01fe26 100644
+--- a/lib/pincode-api.ts
++++ b/lib/pincode-api.ts
+@@ -8,6 +8,19 @@ export interface PincodeResult {
+   etaDays: number;
+   codAvailable: boolean;
+   message: string;
++  /**
++   * Whether this pincode's EXISTENCE (not just serviceability) was
++   * actually confirmed against India Post's real pincode database:
++   *  - 'yes'     -> India Post found a matching post office; this is a
++   *                 genuine, real Indian pincode.
++   *  - 'no'      -> India Post responded successfully but found NO match
++   *                 for this pincode -- it does not exist / is a typo.
++   *  - 'unknown' -> the India Post API itself was unreachable, so we
++   *                 couldn't check either way (checkout should NOT be
++   *                 blocked in this case -- don't punish real customers
++   *                 for a third-party API being briefly down).
++   */
++  verified: 'yes' | 'no' | 'unknown';
+ }
+ 
+ // Rough zone model by the first digit of an Indian PIN code. Used only to
+@@ -49,6 +62,7 @@ export async function checkPincodeServiceability(pincode: string): Promise<Pinco
+       etaDays: 0,
+       codAvailable: false,
+       message: 'Enter a valid 6-digit pincode',
++      verified: 'no',
+     };
+   }
+ 
+@@ -71,6 +85,7 @@ export async function checkPincodeServiceability(pincode: string): Promise<Pinco
+         etaDays,
+         codAvailable,
+         message: `Delivers to ${office.District}, ${office.State} in ${etaDays}-${etaDays + 2} days`,
++        verified: 'yes',
+       };
+     }
+ 
+@@ -79,7 +94,8 @@ export async function checkPincodeServiceability(pincode: string): Promise<Pinco
+       pincode: clean,
+       etaDays: 0,
+       codAvailable: false,
+-      message: 'Sorry, we do not deliver to this pincode yet',
++      message: 'This PIN code does not exist. Please double-check it.',
++      verified: 'no',
+     };
+   } catch {
+     // API unreachable — don't block checkout, fall back to the zone estimate.
+@@ -89,6 +105,7 @@ export async function checkPincodeServiceability(pincode: string): Promise<Pinco
+       etaDays,
+       codAvailable,
+       message: `Estimated delivery in ${etaDays}-${etaDays + 2} days`,
++      verified: 'unknown',
+     };
+   }
+ }
+diff --git a/lib/vendor-pickup-slip-pdf.ts b/lib/vendor-pickup-slip-pdf.ts
+new file mode 100644
+index 0000000..4cbe00e
+--- /dev/null
++++ b/lib/vendor-pickup-slip-pdf.ts
+@@ -0,0 +1,172 @@
++import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
++
++// ---------------------------------------------------------------------
++// Vendor Pickup Slip -- NOT a customer invoice.
++//
++// A vendor ships stock TO our warehouse, never to the end customer, so
++// this document deliberately contains ZERO customer data (no name, no
++// phone, no email, no shipping address). "Ship To" is always OUR
++// warehouse/pickup address (same one configured in Admin -> Settings ->
++// Delhivery, and already shown as plain text on the vendor dashboard's
++// "Ship to" line). This mirrors the same customer-data masking guarantee
++// already enforced at the query level in app/api/vendor/orders/route.ts.
++// ---------------------------------------------------------------------
++
++interface PickupSlipItem {
++  order_item_id: string;
++  order_id: string;
++  product_name: string;
++  barcode?: string | null;
++  quantity: number;
++  price: number;
++  created_at: string;
++}
++
++interface WarehouseInfo {
++  name?: string;
++  address?: string;
++  city?: string;
++  state?: string;
++  pincode?: string;
++  phone?: string;
++}
++
++interface StoreInfo {
++  name?: string;
++}
++
++interface VendorInfo {
++  name?: string;
++  id?: string;
++}
++
++const rupee = (n: number) => `Rs. ${n.toLocaleString('en-IN')}`;
++
++/**
++ * Renders a single-item pickup slip -- what a vendor hands to the
++ * pickup courier (or keeps for their own records) confirming what stock
++ * is being sent to OUR warehouse for a specific order. Deliberately
++ * plain, single-font layout, same style as invoice-pdf.ts.
++ */
++export async function generateVendorPickupSlipPdf(
++  item: PickupSlipItem,
++  warehouse: WarehouseInfo,
++  vendor: VendorInfo,
++  store: StoreInfo
++): Promise<Uint8Array> {
++  const doc = await PDFDocument.create();
++  const page = doc.addPage([595.28, 419.53]); // A5 landscape-ish, this is a slip not a full invoice
++  const font = await doc.embedFont(StandardFonts.Helvetica);
++  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
++
++  const margin = 40;
++  const pageWidth = page.getWidth();
++  let y = page.getHeight() - margin;
++
++  const primary = rgb(0.49, 0.23, 0.11);
++  const muted = rgb(0.45, 0.45, 0.45);
++  const black = rgb(0.1, 0.1, 0.1);
++
++  const draw = (
++    text: string,
++    x: number,
++    yPos: number,
++    opts: { size?: number; f?: typeof font; color?: ReturnType<typeof rgb> } = {}
++  ) => {
++    page.drawText(text, {
++      x,
++      y: yPos,
++      size: opts.size ?? 10,
++      font: opts.f ?? font,
++      color: opts.color ?? black,
++    });
++  };
++
++  // ---- Header ----
++  draw(store.name || 'AruhiHandlooms', margin, y, { size: 18, f: bold, color: primary });
++  y -= 20;
++  draw('VENDOR PICKUP SLIP', margin, y, { size: 11, f: bold, color: muted });
++
++  draw(`Ref: ${item.order_item_id.slice(0, 8).toUpperCase()}`, pageWidth - margin - 160, page.getHeight() - margin, {
++    size: 9,
++  });
++  draw(
++    `Order: #${item.order_id.slice(0, 8).toUpperCase()}`,
++    pageWidth - margin - 160,
++    page.getHeight() - margin - 14,
++    { size: 9 }
++  );
++  draw(
++    `Date: ${new Date(item.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`,
++    pageWidth - margin - 160,
++    page.getHeight() - margin - 28,
++    { size: 9 }
++  );
++
++  y -= 20;
++  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: muted });
++  y -= 22;
++
++  // ---- From (vendor) / Ship To (OUR warehouse -- never the customer) ----
++  const colLeft = margin;
++  const colRight = pageWidth / 2 + 10;
++  const sectionTopY = y;
++
++  draw('From (Vendor)', colLeft, y, { size: 9, f: bold, color: primary });
++  draw('Ship To (Our Warehouse)', colRight, y, { size: 9, f: bold, color: primary });
++  y -= 14;
++  draw(vendor.name || 'Vendor', colLeft, y, { size: 9 });
++  draw(warehouse.name || store.name || 'Warehouse', colRight, y, { size: 9 });
++  y -= 12;
++
++  let leftY = y;
++  let rightY = y;
++  if (warehouse.address) {
++    draw(warehouse.address, colRight, rightY, { size: 9, color: muted });
++    rightY -= 12;
++  }
++  const whLine2 = [warehouse.city, warehouse.state, warehouse.pincode].filter(Boolean).join(', ');
++  if (whLine2) {
++    draw(whLine2, colRight, rightY, { size: 9, color: muted });
++    rightY -= 12;
++  }
++  if (warehouse.phone) {
++    draw(`Phone: ${warehouse.phone}`, colRight, rightY, { size: 9, color: muted });
++    rightY -= 12;
++  }
++
++  y = Math.min(leftY, rightY) - 10;
++  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: muted });
++  y -= 22;
++
++  // ---- Item table (single item -- one pickup slip per order item) ----
++  const col = { item: margin, barcode: 280, qty: 400, price: 460 };
++  draw('Product', col.item, y, { size: 9, f: bold });
++  draw('Barcode', col.barcode, y, { size: 9, f: bold });
++  draw('Qty', col.qty, y, { size: 9, f: bold });
++  draw('Price', col.price, y, { size: 9, f: bold });
++  y -= 8;
++  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: muted });
++  y -= 18;
++
++  const name = item.product_name.length > 34 ? `${item.product_name.slice(0, 31)}...` : item.product_name;
++  draw(name, col.item, y, { size: 9 });
++  draw(item.barcode || '-', col.barcode, y, { size: 8, f: font });
++  draw(String(item.quantity), col.qty, y, { size: 9 });
++  draw(rupee(item.price), col.price, y, { size: 9 });
++  y -= 26;
++
++  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: muted });
++  y -= 22;
++
++  draw(
++    'This slip is for internal warehouse pickup use only. It contains no customer information.',
++    margin,
++    y,
++    { size: 8, color: muted }
++  );
++  y -= 12;
++  draw('Please hand this stock, with this slip, to the pickup courier.', margin, y, { size: 8, color: muted });
++
++  return doc.save();
++}

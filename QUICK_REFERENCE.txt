@@ -1,0 +1,175 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   POPULARITY-BASED PRODUCT SORTING                          ║
+║                                                                              ║
+║  Show top-selling products at the top, just like Google Ads!               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 WHAT YOU GET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Products sorted by clicks, views, and purchases
+✓ Time-based weighting (recent = more important)
+✓ Real-time ranking updates every 10 minutes
+✓ "TRENDING" badges on top 10 products
+✓ Works on both shop and category pages
+✓ No performance impact
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ 5-MINUTE SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Copy popularity-rank-server.ts to lib/
+   → cp popularity-rank-server.ts YOUR_REPO/lib/
+
+2. Verify Supabase has activity_events table
+   → Check TRACKING_SETUP.md for SQL
+
+3. Test it on /shop
+   → Products should be sorted by popularity
+
+4. Done! ✓
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 SCORING SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purchase (actual sale) ........... 100 points ★★★★★
+Checkout Started ................. 30 points ★★★
+Add to Cart ...................... 10 points ★★
+Wishlist Added ................... 5 points  ★
+Product Clicked .................. 2 points  ★
+Product Viewed ................... 1 point   (baseline)
+
+Time Decay:
+├─ Last 7 days ................... 100% weight (full points)
+├─ 7-30 days old ................. 70% weight
+├─ 30-90 days old ................ 30% weight
+└─ Older than 90 days ............ 0% weight (ignored)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 FILES TO USE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REQUIRED:
+  ✓ popularity-rank-server.ts
+    └─ Copy to: lib/popularity-rank-server.ts
+    └─ The core ranking engine
+
+OPTIONAL (But Recommended):
+  ✓ trending-badge.tsx
+    └─ Copy to: components/trending-badge.tsx
+    └─ Shows "TRENDING" badge on top products
+  
+  ✓ Update app/shop/shop-content.tsx
+    └─ Add trending button to quick filters
+    └─ Add badges to product cards
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Check 1: Visit shop page
+  → Go to https://your-site.com/shop
+  → Products should be sorted by popularity
+
+Check 2: View database events
+  → Supabase → activity_events table
+  → Should see recent entries
+
+Check 3: Test ranking API
+  → Browser console: fetch('/api/products/popularity').then(r => r.json()).then(console.log)
+  → Should return array of product IDs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔧 CUSTOMIZATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Change Weights:
+  Edit: lib/popularity-rank-server.ts
+  Look for: const WEIGHTS = { ... }
+  Example: Increase 'purchase' from 100 to 200 to prioritize sales more
+
+Change Time Windows:
+  Edit: lib/popularity-rank-server.ts
+  Look for: const WEIGHT_DECAY = { ... }
+  Example: Change recent_days from 7 to 14 for longer "recent" period
+
+Change Badge Threshold:
+  Edit: app/shop/shop-content.tsx
+  Look for: rankIndex < 10
+  Example: Change to rankIndex < 5 to only badge top 5 products
+
+Change Refresh Frequency:
+  Edit: components/category/category-toolbar-grid.tsx
+  Look for: 10 * 60 * 1000
+  Example: Change to 5 * 60 * 1000 for 5-minute refresh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 DOCUMENTATION FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+README.md
+  → Main guide with overview and installation steps
+  → Read this first!
+
+IMPLEMENTATION_GUIDE.md
+  → Detailed technical implementation
+  → How everything works together
+
+TRACKING_SETUP.md
+  → Complete guide to setting up event tracking
+  → Database schema, API endpoints, verification
+
+SHOP_CHANGES.md
+  → Specific changes needed for shop page
+  → Optional enhancements
+
+CATEGORY_CHANGES.md
+  → Specific changes needed for category pages
+  → Optional enhancements
+
+QUICK_REFERENCE.txt
+  → This file - quick lookup guide
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 BEST PRACTICES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Test with real customer data first
+✓ Monitor conversion rate improvements
+✓ Adjust weights based on business goals
+✓ Review popularity rankings weekly
+✓ Keep activity_events table clean (delete old data)
+✓ Use session IDs for better tracking
+✓ Track wishlist adds for intent signals
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❓ TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Products not sorting?
+  → Check activity_events table has data
+  → Hard refresh browser (Ctrl+Shift+R)
+  → Look at server logs for errors
+
+No tracking data?
+  → Verify /api/analytics/track exists
+  → Check Supabase RLS policies
+  → Test in browser console
+
+Rankings seem wrong?
+  → Check scoring weights
+  → Verify time decay calculations
+  → Make sure recent events are included
+
+Badges not showing?
+  → Verify trending-badge.tsx copied
+  → Check import statements
+  → Look for React errors in console
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 Ready to boost your sales with popularity-based sorting!
+
+Start with README.md for installation steps.

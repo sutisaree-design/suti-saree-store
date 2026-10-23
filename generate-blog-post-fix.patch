@@ -1,0 +1,265 @@
+diff --git a/app/api/admin/generate-blog-post/route.ts b/app/api/admin/generate-blog-post/route.ts
+index 8e828ea..0f92e5c 100644
+--- a/app/api/admin/generate-blog-post/route.ts
++++ b/app/api/admin/generate-blog-post/route.ts
+@@ -3,13 +3,18 @@ import { cookies } from 'next/headers';
+ import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
+ import { getSupabaseAdmin } from '@/lib/supabase-admin';
+ 
+-// Same free-tier NVIDIA NIM setup already used by
++// Same free-tier NVIDIA NIM key already used by
+ // app/api/admin/generate-listing/route.ts and lib/vendor-ai-listing.ts —
+ // reuses NVIDIA_API_KEY so there's nothing new to configure. Text-only here
+-// (no product photo), so the vision model is used purely as a text model.
++// (no product photo), so we deliberately use a lighter, text-only model
++// instead of the 11b VISION model those other two routes need — the vision
++// model was consistently taking 48s+ to finish a long JSON blog post on
++// NIM's free tier and blowing straight through the 60s Vercel ceiling
++// (logged in Vercel as a recurring `[AbortError] This operation was
++// aborted` 504). The 8b text model produces the same JSON far faster.
+ export const maxDuration = 60;
+ 
+-const MODEL = 'meta/llama-3.2-11b-vision-instruct';
++const MODEL = 'meta/llama-3.1-8b-instruct';
+ const NIM_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions';
+ 
+ interface GeneratedPost {
+@@ -51,6 +56,104 @@ function sanitizeInlineLinks(paragraph: string, validNames: Set<string>): string
+   });
+ }
+ 
++function escapeRegExp(s: string) {
++  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++}
++
++// The model occasionally drops the required leading `[anchor text]` and
++// just emits a bare `(category:Name)` straight in the prose — not a valid
++// link (CATEGORY_LINK_RE won't match it, so sanitizeInlineLinks leaves it
++// untouched), just literal junk text that leaks onto the live page
++// verbatim, e.g. "...Banarasi silk saree (category:Banarasi Sarees) to
++// the...". The sentence already reads fine without it, so it's stripped
++// outright rather than attempting to reconstruct a link from a name that,
++// in practice, is often not even a real category (as in that example).
++const STRAY_CATEGORY_PAREN_RE = /(?<!\])\(category:[^)]+\)/gi;
++function stripStrayCategoryParens(paragraph: string): string {
++  return paragraph.replace(STRAY_CATEGORY_PAREN_RE, '').replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,])/g, '$1');
++}
++
++// Fallback so a post never ships with ZERO internal links. The prompt asks
++// the model to embed `[anchor](category:Name)` links itself, but that's an
++// instruction-following ask on top of an already-long structured-JSON
++// task — the lighter/faster 8b text model (swapped in to fix the NIM
++// timeout, see MODEL comment above) follows it far less reliably than the
++// bigger vision model used to. Rather than depend on the model for
++// something this important for SEO, we guarantee it ourselves:
++//   1) If the model DID embed at least one valid link, leave its output
++//      alone entirely — no double-linking.
++//   2) Otherwise, look for a category name (or its simple singular) that
++//      already appears naturally in the prose and wrap that real mention
++//      in the link markup — reads exactly like the model had done it.
++//   3) If literally no category name appears anywhere in the text, append
++//      one short, clearly-labelled sentence linking the related category
++//      to a mid-post paragraph, so there's always at least one link.
++function ensureCategoryLinks(
++  paragraphs: string[],
++  categoryNames: string[],
++  relatedCategoryName: string
++): string[] {
++  const alreadyLinked = new Set<string>();
++  for (const p of paragraphs) {
++    CATEGORY_LINK_RE.lastIndex = 0;
++    let m: RegExpExecArray | null;
++    while ((m = CATEGORY_LINK_RE.exec(p)) !== null) {
++      alreadyLinked.add(m[2].trim().toLowerCase());
++    }
++  }
++  if (alreadyLinked.size > 0) return paragraphs;
++
++  const isEligible = (p: string) =>
++    p.trim().length > 0 && !/^\{\{h2:/.test(p) && !/^\{\{product:/.test(p) && !/^\{\{review:/.test(p);
++
++  const result = [...paragraphs];
++  let inserted = 0;
++  const maxLinks = 2;
++
++  for (const name of categoryNames) {
++    if (inserted >= maxLinks) break;
++    const singular = name.replace(/s$/i, '');
++    const re = new RegExp(`\\b(${escapeRegExp(name)}|${escapeRegExp(singular)})\\b`, 'i');
++    for (let i = 0; i < result.length; i++) {
++      if (!isEligible(result[i])) continue;
++      const m = result[i].match(re);
++      if (m && m.index !== undefined) {
++        const matchedText = m[0];
++        result[i] =
++          result[i].slice(0, m.index) +
++          `[${matchedText}](category:${name})` +
++          result[i].slice(m.index + matchedText.length);
++        inserted++;
++        break;
++      }
++    }
++  }
++
++  if (inserted === 0) {
++    const fallbackName =
++      relatedCategoryName && categoryNames.some((c) => c.toLowerCase() === relatedCategoryName.toLowerCase())
++        ? relatedCategoryName
++        : categoryNames[0];
++    if (fallbackName) {
++      const midStart = Math.floor(result.length / 2);
++      let targetIdx = -1;
++      for (let i = midStart; i < result.length; i++) {
++        if (isEligible(result[i])) {
++          targetIdx = i;
++          break;
++        }
++      }
++      if (targetIdx === -1) targetIdx = result.findIndex(isEligible);
++      if (targetIdx !== -1) {
++        result[targetIdx] =
++          `${result[targetIdx].trim()} For more options, browse our [${fallbackName}](category:${fallbackName}) collection.`;
++      }
++    }
++  }
++
++  return result;
++}
++
+ function buildPrompt(topic: string, extraKeywords: string, categoryNames: string[], strict = false) {
+   const categoryList = categoryNames.length > 0 ? categoryNames.join(', ') : '(no categories available)';
+   // `strict` is used for the one-shot automatic retry when a normal
+@@ -231,33 +334,33 @@ export async function POST(req: Request) {
+   const validNameSet = new Set(categoryNames.map((n) => n.toLowerCase()));
+ 
+   try {
+-    // First attempt: the normal-length prompt (900-1300 words), generous
+-    // token budget, and as much of the platform's time budget as we can
+-    // safely give it (48s, leaving ~10-12s for the DB reads before/after
+-    // under the 60s hard ceiling). Only a TRUNCATED response (model ran
+-    // out of tokens mid-JSON — a genuine content-length problem) gets a
+-    // retry, and that retry uses a deliberately small time budget since
+-    // by then most of the 60s ceiling is already spent. A pure timeout
+-    // (NIM's free tier not responding at all within the window — verified
+-    // via Vercel logs as a real, recurring failure mode, not just
+-    // truncation) is NOT retried here: the endpoint being slow right now
+-    // won't be fixed by asking again immediately, and a second long wait
+-    // would blow straight through the platform ceiling anyway. That case
+-    // gets its own honest error message below instead.
++    // First attempt: the normal-length prompt (900-1300 words) on the fast
++    // 8b text model, given a 35s budget — comfortably enough for this
++    // model on NIM's free tier, while still leaving a real ~15-18s window
++    // for a retry plus the DB reads before/after, all inside the 60s
++    // platform ceiling. Both a TRUNCATED response (model ran out of tokens
++    // mid-JSON) and a TIMEOUT (NIM free tier just being slow right now —
++    // verified via Vercel logs as a real, recurring failure mode) now get
++    // ONE retry with a shorter/stricter prompt and a smaller token budget,
++    // since that retry is cheap and fast enough on the 8b model to still
++    // fit the remaining time — previously a timeout skipped the retry
++    // entirely and failed the whole request outright.
+     let attempt = await attemptGeneration(
+       apiKey,
+       buildPrompt(topic, extraKeywords, categoryNames, false),
+       5500,
+-      48_000
++      35_000
+     );
+ 
+-    if (!attempt.ok && attempt.reason === 'truncated') {
+-      console.error('[generate-blog-post] First attempt truncated — retrying with a shorter prompt.');
++    if (!attempt.ok && (attempt.reason === 'truncated' || attempt.reason === 'timeout')) {
++      console.error(
++        `[generate-blog-post] First attempt ${attempt.reason} — retrying with a shorter/stricter prompt.`
++      );
+       attempt = await attemptGeneration(
+         apiKey,
+         buildPrompt(topic, extraKeywords, categoryNames, true),
+-        3500,
+-        9_000
++        3000,
++        18_000
+       );
+     }
+ 
+@@ -276,7 +379,7 @@ export async function POST(req: Request) {
+         return NextResponse.json(
+           {
+             error:
+-              "AI service (NVIDIA's free tier) is responding slowly right now and didn't finish in time. Please wait a minute and try again.",
++              "AI service (NVIDIA's free tier) is responding slowly right now and didn't finish in time, even after a retry. Please wait a minute and try again.",
+           },
+           { status: 504 }
+         );
+@@ -297,9 +400,20 @@ export async function POST(req: Request) {
+     const parsed = attempt.parsed;
+ 
+ 
+-    const bodyParagraphs = parsed.body_paragraphs
++    let bodyParagraphs = parsed.body_paragraphs
+       .filter((p) => typeof p === 'string' && p.trim().length > 0)
+-      .map((p) => sanitizeInlineLinks(p, validNameSet));
++      .map((p) => sanitizeInlineLinks(p, validNameSet))
++      .map(stripStrayCategoryParens);
++
++    const relatedRaw = (parsed.related_category_name || '').trim();
++    const relatedCategoryName = validNameSet.has(relatedRaw.toLowerCase())
++      ? categoryNames.find((n) => n.toLowerCase() === relatedRaw.toLowerCase()) || ''
++      : '';
++
++    // Guarantee at least one real internal (category) link — see comment
++    // on ensureCategoryLinks for why this can no longer be left entirely
++    // up to the model.
++    bodyParagraphs = ensureCategoryLinks(bodyParagraphs, categoryNames, relatedCategoryName);
+ 
+     // Estimated by us from the actual generated word count (~200 wpm),
+     // rather than trusting the model's own guess, which was frequently off
+@@ -307,16 +421,9 @@ export async function POST(req: Request) {
+     const totalWords = bodyParagraphs.join(' ').split(/\s+/).filter(Boolean).length;
+     const readMinutes = Math.max(2, Math.round(totalWords / 200));
+ 
+-    const relatedRaw = (parsed.related_category_name || '').trim();
+-    const relatedCategoryName = validNameSet.has(relatedRaw.toLowerCase())
+-      ? categoryNames.find((n) => n.toLowerCase() === relatedRaw.toLowerCase()) || ''
+-      : '';
+-
+     // Pull a real product photo from that category to suggest as the cover
+     // image — a live catalog photo converts better than a generic stock
+     // image, and it saves the manual "go find a URL" step for the admin.
+-    // Best-effort: if nothing's found (empty category, no images), the
+-    // admin just gets an empty cover field like before, nothing breaks.
+     let suggestedCoverImage = '';
+     if (relatedCategoryName) {
+       const { data: productRows } = await supabase
+@@ -332,6 +439,32 @@ export async function POST(req: Request) {
+       if (withImages) suggestedCoverImage = withImages.images[0];
+     }
+ 
++    // Fallback so the post never ships with "No Image": relatedCategoryName
++    // is only ever set when the model's related_category_name exactly
++    // matches a real, live category (see validNameSet check above) — the
++    // model can and does sometimes invent a plausible-sounding but
++    // non-existent category (e.g. "Banarasi Sarees" when the real
++    // category is "Silk Sarees"), which leaves relatedCategoryName empty
++    // and, previously, the cover image blank too. When that happens (or
++    // the matched category simply has no live product photos yet), fall
++    // back to any live, in-stock product photo store-wide instead of
++    // leaving the field empty — still a real catalog photo, just not
++    // guaranteed to match the topic as closely as an in-category one.
++    if (!suggestedCoverImage) {
++      const { data: fallbackRows } = await supabase
++        .from('products')
++        .select('images')
++        .eq('approval_status', 'live')
++        .eq('in_stock', true)
++        .order('featured', { ascending: false })
++        .order('rating', { ascending: false })
++        .limit(10);
++      const fallbackWithImages = (fallbackRows ?? []).find(
++        (p: any) => Array.isArray(p.images) && p.images.length > 0
++      );
++      if (fallbackWithImages) suggestedCoverImage = fallbackWithImages.images[0];
++    }
++
+     // Auto-insert real product cards ({{product:slug}} — same marker the
+     // admin's "Insert product card" button writes, parsed by
+     // app/blog/[slug]/page.tsx into a <BlogProductCard> with a real photo,

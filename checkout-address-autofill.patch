@@ -1,0 +1,469 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index 4e17e48..91074f0 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -58,6 +58,13 @@ import {
+   DialogTitle,
+ } from '@/components/ui/dialog';
+ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from '@/components/ui/select';
+ import {
+   AlertDialog,
+   AlertDialogContent,
+@@ -71,6 +78,50 @@ import {
+ import TrustBadges from '@/components/checkout/trust-badges';
+ import { toast } from 'sonner';
+ 
++// All Indian states & union territories, for the Shipping Address "State"
++// dropdown. Pincode auto-fill (via India Post's API) sets this field to
++// whatever it returns — if that ever doesn't exactly match an entry here,
++// we add it in on the fly (see the `stateOptions` list below) so the
++// dropdown never silently loses/blanks out a real value.
++const INDIAN_STATES = [
++  'Andhra Pradesh',
++  'Arunachal Pradesh',
++  'Assam',
++  'Bihar',
++  'Chhattisgarh',
++  'Goa',
++  'Gujarat',
++  'Haryana',
++  'Himachal Pradesh',
++  'Jharkhand',
++  'Karnataka',
++  'Kerala',
++  'Madhya Pradesh',
++  'Maharashtra',
++  'Manipur',
++  'Meghalaya',
++  'Mizoram',
++  'Nagaland',
++  'Odisha',
++  'Punjab',
++  'Rajasthan',
++  'Sikkim',
++  'Tamil Nadu',
++  'Telangana',
++  'Tripura',
++  'Uttar Pradesh',
++  'Uttarakhand',
++  'West Bengal',
++  'Andaman and Nicobar Islands',
++  'Chandigarh',
++  'Dadra and Nagar Haveli and Daman and Diu',
++  'Delhi',
++  'Jammu and Kashmir',
++  'Ladakh',
++  'Lakshadweep',
++  'Puducherry',
++];
++
+ declare global {
+   interface Window {
+     Razorpay: any;
+@@ -147,6 +198,12 @@ export default function CheckoutPage() {
+   const [pincode, setPincode] = useState('');
+   const [country, setCountry] = useState('India');
+   const [deliveryEstimate, setDeliveryEstimate] = useState<PincodeResult | null>(null);
++  // Tracks whether the current city/state values were filled in by us (from
++  // the pincode lookup) rather than typed by the shopper, so the auto-fill
++  // effect below never clobbers something they entered by hand. Reset to
++  // false the moment the shopper edits either field themselves.
++  const cityAutoFilledRef = useRef(false);
++  const stateAutoFilledRef = useRef(false);
+ 
+   // Bug fix: clicking "Log In" / "Create Account" from the resell prompt used
+   // to send the shopper to /login or /signup and back, which remounts this
+@@ -159,8 +216,19 @@ export default function CheckoutPage() {
+   // effect below (which normally auto-fills the customer's default address
+   // once we know who they are) doesn't clobber it.
+   const draftRestoredRef = useRef(false);
+-
+-  const saveAddressDraft = () => {
++  // See preserveExisting above — true unless the restored draft was saved
++  // by the deliberate "Log in" link, in which case we let a saved address
++  // apply on top of it once the account is known.
++  const suppressSavedAddressAutoApplyRef = useRef(false);
++
++  // preserveExisting=true means "never let a saved address silently
++  // override this draft" (used for accidental-refresh protection and the
++  // resale login flow, where we must keep exactly what the shopper typed).
++  // preserveExisting=false means "this login was explicitly to fetch a
++  // saved address" (our Contact Information "Log in" link) — in that case
++  // we WANT the account's default address to apply once we know who they
++  // are, instead of leaving the guest draft in place.
++  const saveAddressDraft = (preserveExisting: boolean = true) => {
+     if (typeof window === 'undefined') return;
+     try {
+       sessionStorage.setItem(
+@@ -176,6 +244,7 @@ export default function CheckoutPage() {
+           stateName,
+           pincode,
+           country,
++          preserveExisting,
+         })
+       );
+     } catch {
+@@ -184,6 +253,29 @@ export default function CheckoutPage() {
+     }
+   };
+ 
++  const clearAddressDraft = () => {
++    if (typeof window === 'undefined') return;
++    try {
++      sessionStorage.removeItem(CHECKOUT_ADDRESS_DRAFT_KEY);
++    } catch {
++      // ignore
++    }
++  };
++
++  // Auto-save the in-progress address on every keystroke (not just before
++  // navigating to login) so an accidental refresh/back-button/tab-close
++  // doesn't wipe out what the shopper already typed — the mount effect
++  // below restores it. Skipped while showing the compact saved-address
++  // summary, since there's nothing being freshly typed in that view.
++  useEffect(() => {
++    if (showAddressForm === false && selectedAddressId !== 'new') return;
++    const hasAnyInput =
++      email || firstName || lastName || shipPhone || addressLine1 || addressLine2 || city || stateName || pincode;
++    if (!hasAnyInput) return;
++    saveAddressDraft();
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [email, firstName, lastName, shipPhone, addressLine1, addressLine2, city, stateName, pincode, country]);
++
+   // Runs once on mount, before we know whether the shopper is logged in, so
+   // it always wins over the saved-address auto-fill below.
+   useEffect(() => {
+@@ -203,7 +295,14 @@ export default function CheckoutPage() {
+         stateName: string;
+         pincode: string;
+         country: string;
++        preserveExisting: boolean;
+       }>;
++      // A draft with no preserveExisting field at all was written by an
++      // older version of this page (before that flag existed) — rather
++      // than guess, we discard it and let the shopper's account/session
++      // resolve normally. Only ever matters for one draft, right after a
++      // deploy, for a tab that was already mid-checkout.
++      if (!('preserveExisting' in draft)) return;
+       setEmail(draft.email || '');
+       setFirstName(draft.firstName || '');
+       setLastName(draft.lastName || '');
+@@ -217,6 +316,7 @@ export default function CheckoutPage() {
+       setSelectedAddressId('new');
+       setShowAddressForm(true);
+       draftRestoredRef.current = true;
++      suppressSavedAddressAutoApplyRef.current = draft.preserveExisting !== false;
+     } catch {
+       // Corrupt/unreadable draft — ignore and fall back to normal behaviour.
+     }
+@@ -230,9 +330,18 @@ export default function CheckoutPage() {
+     setShipPhone(addr.phone || '');
+     setAddressLine1(addr.line1 || '');
+     setAddressLine2(addr.line2 || '');
++    // These are the customer's own saved values, not a pincode-lookup guess
++    // — mark them as "manual" so the pincode auto-fill effect doesn't
++    // silently swap them out.
++    cityAutoFilledRef.current = false;
++    stateAutoFilledRef.current = false;
+     setCity(addr.city || '');
+     setStateName(addr.state || '');
+     setPincode(addr.pincode || '');
++    // A real saved address is now in place — any leftover guest draft from
++    // earlier in this tab's session (e.g. typed before logging in) is now
++    // stale and must not survive to confuse a later reload/remount.
++    clearAddressDraft();
+   };
+ 
+   const handleSelectSavedAddress = (id: string) => {
+@@ -294,14 +403,19 @@ export default function CheckoutPage() {
+     fetchAddresses()
+       .then((list) => {
+         setSavedAddresses(list);
+-        // If we just restored an in-progress address draft (shopper logged
+-        // in / signed up mid-checkout), keep what they typed instead of
+-        // silently swapping in their saved default address.
+-        if (draftRestoredRef.current) return;
++        // If we just restored an in-progress address draft that must be
++        // preserved (resale login, or refresh/back-button recovery), keep
++        // what the shopper typed instead of silently swapping in their
++        // saved default address.
++        if (suppressSavedAddressAutoApplyRef.current) return;
+         const preferred = list.find((a) => a.is_default) || list[0];
+         if (preferred) {
+           setSelectedAddressId(preferred.id);
+           applySavedAddress(preferred);
++          // They either arrived fresh (no draft) or explicitly used the
++          // "Log in" link to fetch this address — either way, show the
++          // compact saved-address summary instead of the editable form.
++          setShowAddressForm(false);
+         }
+       })
+       .catch(() => {});
+@@ -387,11 +501,26 @@ export default function CheckoutPage() {
+     }
+     let cancelled = false;
+     checkPincodeServiceability(pincode).then((res) => {
+-      if (!cancelled) setDeliveryEstimate(res);
++      if (cancelled) return;
++      setDeliveryEstimate(res);
++      // Auto-fill City & State from the pincode — free, via the same India
++      // Post lookup (api.postalpincode.in) already used for the delivery
++      // estimate above, no extra API/key needed. Only overwrite a field if
++      // it's empty or still holds a value we auto-filled ourselves, so we
++      // never stomp on something the shopper typed in by hand.
++      if (res.serviceable && res.city && (!city || cityAutoFilledRef.current)) {
++        setCity(res.city);
++        cityAutoFilledRef.current = true;
++      }
++      if (res.serviceable && res.state && (!stateName || stateAutoFilledRef.current)) {
++        setStateName(res.state);
++        stateAutoFilledRef.current = true;
++      }
+     });
+     return () => {
+       cancelled = true;
+     };
++    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [pincode]);
+ 
+   useEffect(() => {
+@@ -454,7 +583,9 @@ export default function CheckoutPage() {
+   };
+ 
+   // Clears whichever mode produced this order — the single Buy Now item, or
+-  // the full persistent cart — without touching the other.
++  // the full persistent cart — without touching the other. Also drops the
++  // in-progress address draft, so a completed order doesn't leave stale
++  // address data sitting around for the shopper's next checkout.
+   const clearOrderedItems = () => {
+     if (isBuyNow) {
+       clearBuyNow();
+@@ -462,6 +593,7 @@ export default function CheckoutPage() {
+     } else {
+       clearCart();
+     }
++    clearAddressDraft();
+   };
+ 
+   // +/- stepper in the order summary. Routes to whichever store actually
+@@ -590,6 +722,18 @@ export default function CheckoutPage() {
+     router.push('/login?next=/checkout');
+   };
+ 
++  // Lets a guest who's mid-checkout decide to log in (e.g. to use a saved
++  // address or loyalty points) without losing whatever they've already
++  // typed if their account turns out to have no saved address — same
++  // draft-save-and-restore trick as the resale login flow above, just
++  // reachable directly from Contact Information. Unlike the resale flow,
++  // this one explicitly wants their saved default address applied once
++  // we know who they are, so we pass preserveExisting=false.
++  const goToLoginFromCheckout = () => {
++    saveAddressDraft(false);
++    router.push('/login?next=/checkout');
++  };
++
+   const goToResaleSignup = () => {
+     saveAddressDraft();
+     setShowResaleLoginPrompt(false);
+@@ -1049,6 +1193,33 @@ export default function CheckoutPage() {
+ 
+       <form onSubmit={onSubmit} className="grid gap-8 lg:grid-cols-3">
+         <div className="lg:col-span-2">
++          {/* Login status — always shown, whether the saved-address summary
++              or the editable guest form is what's displayed below it. */}
++          <section
++            className={`mb-4 flex items-center justify-between gap-3 rounded-lg border p-4 ${
++              user ? 'border-green-200 bg-green-50' : 'border-border/60 bg-card'
++            }`}
++          >
++            {user ? (
++              <span className="text-sm font-medium text-green-700">
++                ✓ Logged in as {user.email}
++              </span>
++            ) : (
++              <>
++                <span className="text-sm text-muted-foreground">
++                  Checking out as a guest.
++                </span>
++                <button
++                  type="button"
++                  onClick={goToLoginFromCheckout}
++                  className="shrink-0 text-sm font-medium text-secondary underline-offset-2 hover:underline"
++                >
++                  Already have an account? Log in
++                </button>
++              </>
++            )}
++          </section>
++
+           {hasSavedAddressSummary ? (
+             <section className="rounded-lg border border-border/60 bg-card p-5">
+               <div className="mb-3 flex items-center justify-between gap-3">
+@@ -1089,6 +1260,7 @@ export default function CheckoutPage() {
+                 <Input
+                   id="firstName"
+                   name="firstName"
++                  autoComplete="given-name"
+                   required
+                   placeholder="Aanya"
+                   value={firstName}
+@@ -1100,6 +1272,7 @@ export default function CheckoutPage() {
+                 <Input
+                   id="lastName"
+                   name="lastName"
++                  autoComplete="family-name"
+                   required
+                   placeholder="Sharma"
+                   value={lastName}
+@@ -1112,6 +1285,7 @@ export default function CheckoutPage() {
+                   id="email"
+                   name="email"
+                   type="email"
++                  autoComplete="email"
+                   required
+                   placeholder="aanya@example.com"
+                   value={email}
+@@ -1127,6 +1301,7 @@ export default function CheckoutPage() {
+                   id="phone"
+                   name="phone"
+                   type="tel"
++                  autoComplete="tel"
+                   required
+                   placeholder="+91 98765 43210"
+                   value={shipPhone}
+@@ -1147,6 +1322,7 @@ export default function CheckoutPage() {
+                 <Input
+                   id="address"
+                   name="address"
++                  autoComplete="address-line1"
+                   required
+                   placeholder="12, MG Road, Apt 304"
+                   value={addressLine1}
+@@ -1158,58 +1334,88 @@ export default function CheckoutPage() {
+                 <Input
+                   id="address2"
+                   name="address2"
++                  autoComplete="address-line2"
+                   placeholder="Bandra West"
+                   value={addressLine2}
+                   onChange={(e) => setAddressLine2(e.target.value)}
+                 />
+               </div>
++              <div className="grid gap-1.5">
++                <Label htmlFor="pincode">PIN code *</Label>
++                <Input
++                  id="pincode"
++                  name="pincode"
++                  autoComplete="postal-code"
++                  required
++                  placeholder="400050"
++                  inputMode="numeric"
++                  value={pincode}
++                  onChange={(e) => setPincode(e.target.value)}
++                />
++                {deliveryEstimate?.serviceable && (city || stateName) && (
++                  <p className="text-[11px] text-muted-foreground">
++                    Auto-filled City/State below — you can edit if needed.
++                  </p>
++                )}
++              </div>
+               <div className="grid gap-4 sm:grid-cols-2">
+                 <div className="grid gap-1.5">
+                   <Label htmlFor="city">City *</Label>
+                   <Input
+                     id="city"
+                     name="city"
++                    autoComplete="address-level2"
+                     required
+                     placeholder="Mumbai"
+                     value={city}
+-                    onChange={(e) => setCity(e.target.value)}
++                    onChange={(e) => {
++                      // Shopper is typing city by hand — stop treating it as
++                      // ours to overwrite on the next pincode lookup.
++                      cityAutoFilledRef.current = false;
++                      setCity(e.target.value);
++                    }}
+                   />
+                 </div>
+                 <div className="grid gap-1.5">
+                   <Label htmlFor="state">State *</Label>
+-                  <Input
+-                    id="state"
+-                    name="state"
+-                    required
+-                    placeholder="Maharashtra"
+-                    value={stateName}
+-                    onChange={(e) => setStateName(e.target.value)}
+-                  />
++                  <Select
++                    value={stateName || undefined}
++                    onValueChange={(v) => {
++                      stateAutoFilledRef.current = false;
++                      setStateName(v);
++                    }}
++                  >
++                    <SelectTrigger id="state">
++                      <SelectValue placeholder="Select state" />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {/* If pincode auto-fill or a saved address ever returns
++                          a state name that doesn't exactly match our list,
++                          add it in so the real value is never lost/blanked. */}
++                      {(INDIAN_STATES.includes(stateName) || !stateName
++                        ? INDIAN_STATES
++                        : [stateName, ...INDIAN_STATES]
++                      ).map((s) => (
++                        <SelectItem key={s} value={s}>
++                          {s}
++                        </SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
+                 </div>
+               </div>
+-              <div className="grid gap-4 sm:grid-cols-2">
+-                <div className="grid gap-1.5">
+-                  <Label htmlFor="pincode">PIN code *</Label>
+-                  <Input
+-                    id="pincode"
+-                    name="pincode"
+-                    required
+-                    placeholder="400050"
+-                    inputMode="numeric"
+-                    value={pincode}
+-                    onChange={(e) => setPincode(e.target.value)}
+-                  />
+-                </div>
+-                <div className="grid gap-1.5">
+-                  <Label htmlFor="country">Country *</Label>
+-                  <Input
+-                    id="country"
+-                    name="country"
+-                    required
+-                    value={country}
+-                    onChange={(e) => setCountry(e.target.value)}
+-                  />
+-                </div>
++              <div className="grid gap-1.5">
++                <Label htmlFor="country">Country *</Label>
++                <Select value={country || 'India'} onValueChange={setCountry}>
++                  <SelectTrigger id="country">
++                    <SelectValue placeholder="Select country" />
++                  </SelectTrigger>
++                  <SelectContent>
++                    {/* Only India for now — more countries can be added here
++                        later without changing how this field works. */}
++                    <SelectItem value="India">India</SelectItem>
++                  </SelectContent>
++                </Select>
+               </div>
+             </div>
+           </section>

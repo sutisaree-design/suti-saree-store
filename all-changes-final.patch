@@ -1,0 +1,263 @@
+diff --git a/app/api/merchant-feed/route.ts b/app/api/merchant-feed/route.ts
+index 32c9cae..961757f 100644
+--- a/app/api/merchant-feed/route.ts
++++ b/app/api/merchant-feed/route.ts
+@@ -224,11 +224,18 @@ export async function GET() {
+             // only have ~13 chars of headroom to keep the size suffix
+             // unique per colour without ever crossing that limit.
+             const sizeSlug = s.size.replace(/\s+/g, '').slice(0, 10);
++            // ?size= makes this item's landing page pre-select this exact
++            // size on load (see product-detail.tsx), so the visible price
++            // and structured-data price both match what's advertised here
++            // -- without it, every size in this colour shares one URL that
++            // always opens on the first size, and Google flags every other
++            // size's price as a landing-page mismatch.
++            const sizeLink = `${SITE_URL}/product/${v.slug}?size=${encodeURIComponent(s.size)}`;
+             return renderItem({
+               id: `${v.id}-${sizeSlug}`,
+               itemGroupId: p.id,
+               title: `${p.name} - ${v.color} - ${s.size}`,
+-              link: `${SITE_URL}/product/${v.slug}`,
++              link: sizeLink,
+               images,
+               inStock: (s.stock_quantity || 0) > 0,
+               price,
+diff --git a/app/product/[slug]/page.tsx b/app/product/[slug]/page.tsx
+index 391e21b..a735e89 100644
+--- a/app/product/[slug]/page.tsx
++++ b/app/product/[slug]/page.tsx
+@@ -17,7 +17,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms
+ // edit, or a vendor-side approval-status change).
+ export const revalidate = 60;
+ 
+-type Params = { params: { slug: string } };
++type Params = { params: { slug: string }; searchParams?: { size?: string } };
+ 
+ /**
+  * Resolves either a base product slug or an independent colour-variant
+@@ -97,11 +97,21 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
+   };
+ }
+ 
+-export default async function ProductPage({ params }: Params) {
++export default async function ProductPage({ params, searchParams }: Params) {
+   const resolved = await resolveSeoTarget(params.slug);
+   const product = resolved?.product ?? null;
+   const variant = resolved?.variant ?? null;
+ 
++  // If this request came from a Merchant Center feed link (which appends
++  // ?size=XL for products with per-size pricing -- see
++  // app/api/merchant-feed/route.ts), resolve that exact size's price so
++  // the structured-data <Offer> below matches what was advertised for it,
++  // not just the colour's default price. Falls back to the colour/product
++  // price when there's no ?size=, no matching size, or no override for it.
++  const sizeParam = searchParams?.size?.trim();
++  const matchedSize = sizeParam ? variant?.sizes.find((s) => s.size === sizeParam) : undefined;
++  const offerPrice = matchedSize?.price_override ?? variant?.price_override ?? product?.price ?? 0;
++
+   // Same source of truth as app/api/merchant-feed/route.ts (Admin >
+   // Marketing > Shipping & Returns Timing) -- keeping this schema in sync
+   // with the feed avoids a shipping/returns misrepresentation mismatch
+@@ -132,12 +142,13 @@ export default async function ProductPage({ params }: Params) {
+         },
+         offers: {
+           '@type': 'Offer',
+-          url: `${SITE_URL}/product/${params.slug}`,
++          url: `${SITE_URL}/product/${params.slug}${sizeParam ? `?size=${encodeURIComponent(sizeParam)}` : ''}`,
+           priceCurrency: 'INR',
+-          price: variant?.price_override ?? product.price,
+-          availability: product.inStock
+-            ? 'https://schema.org/InStock'
+-            : 'https://schema.org/OutOfStock',
++          price: offerPrice,
++          availability:
++            (matchedSize ? matchedSize.stock_quantity > 0 : product.inStock)
++              ? 'https://schema.org/InStock'
++              : 'https://schema.org/OutOfStock',
+           itemCondition: 'https://schema.org/NewCondition',
+           seller: {
+             '@type': 'Organization',
+diff --git a/app/product/[slug]/product-detail.tsx b/app/product/[slug]/product-detail.tsx
+index e23d421..048713a 100644
+--- a/app/product/[slug]/product-detail.tsx
++++ b/app/product/[slug]/product-detail.tsx
+@@ -286,8 +286,19 @@ export default function ProductDetail() {
+     };
+   }, [baseProduct, variant]);
+ 
++  // Defaults to the first size, UNLESS the URL carries a `?size=` param --
++  // that's how each Google Merchant Center feed item links back here (see
++  // app/api/merchant-feed/route.ts), so the page must land on that exact
++  // size pre-selected. Without this, every size shares one URL that always
++  // opens on size #1, and Google's landing-page price check flags every
++  // other size's feed item as a "price mismatch" since the visible price
++  // never matches what was advertised for it.
+   useEffect(() => {
+-    if (product) setSelectedSize(product.sizes[0] ?? null);
++    if (!product) return;
++    const sizeFromUrl =
++      typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('size') : null;
++    const matched = sizeFromUrl && product.sizes.includes(sizeFromUrl) ? sizeFromUrl : null;
++    setSelectedSize(matched ?? product.sizes[0] ?? null);
+   }, [product]);
+ 
+   // The `product` object above intentionally keeps an aggregate stock
+diff --git a/components/admin/product-variants-manager.tsx b/components/admin/product-variants-manager.tsx
+index 3c64bab..1cd5c71 100644
+--- a/components/admin/product-variants-manager.tsx
++++ b/components/admin/product-variants-manager.tsx
+@@ -66,7 +66,19 @@ interface VariantFormState {
+   sizes: { size: string; stockQuantity: string; priceOverride: string; sku: string }[];
+ }
+ 
+-const emptyVariantForm = (): VariantFormState => ({
++// Builds the starting size rows for a brand-new variant from the sizes
++// ticked on the main product form (e.g. "Free Size, S, M, L"). Falls back
++// to "Free Size" if the product has none selected yet.
++const defaultSizeRows = (productSizes?: string) => {
++  const sizes = (productSizes ?? '')
++    .split(',')
++    .map((s) => s.trim())
++    .filter(Boolean);
++  const list = sizes.length ? sizes : ['Free Size'];
++  return list.map((size) => ({ size, stockQuantity: '3', priceOverride: '', sku: '' }));
++};
++
++const emptyVariantForm = (productSizes?: string): VariantFormState => ({
+   color: '',
+   colorHex: '',
+   slug: '',
+@@ -79,7 +91,7 @@ const emptyVariantForm = (): VariantFormState => ({
+   isDefault: false,
+   rating: '',
+   reviews: '',
+-  sizes: [{ size: 'Free Size', stockQuantity: '3', priceOverride: '', sku: '' }],
++  sizes: defaultSizeRows(productSizes),
+ });
+ 
+ interface Props {
+@@ -87,6 +99,16 @@ interface Props {
+   productName: string;
+   productSku: string;
+   baseImage?: string;
++  // Comma-separated list from the main product's "Colours" field. The
++  // first entry is the product's own base colour (never a real row in
++  // product_variants until explicitly converted -- see
++  // "Add original colour as a variant" button below).
++  productColors?: string;
++  // Comma-separated list of sizes ticked in the main product's "Sizes"
++  // field (e.g. "Free Size, S, M, L"). Used to pre-select the same sizes
++  // when a new colour/variant is added, instead of always defaulting to
++  // just "Free Size".
++  productSizes?: string;
+   // When true, the "Add Variant" form opens automatically as soon as the
+   // product is ready -- lets a button outside this component (the row's
+   // "Add Variation" icon) jump straight to adding a colour without an
+@@ -106,6 +128,8 @@ export default function ProductVariantsManager({
+   productName,
+   productSku,
+   baseImage,
++  productColors,
++  productSizes,
+   autoOpenAdd,
+   onAutoOpenAddHandled,
+ }: Props) {
+@@ -114,7 +138,7 @@ export default function ProductVariantsManager({
+ 
+   const [open, setOpen] = useState(false);
+   const [editing, setEditing] = useState<VariantWithSizes | null>(null);
+-  const [form, setForm] = useState<VariantFormState>(emptyVariantForm());
++  const [form, setForm] = useState<VariantFormState>(emptyVariantForm(productSizes));
+   const [saving, setSaving] = useState(false);
+   const [uploading, setUploading] = useState(false);
+   const [importUrl, setImportUrl] = useState('');
+@@ -146,8 +170,39 @@ export default function ProductVariantsManager({
+   const openNew = () => {
+     setEditing(null);
+     setForm({
+-      ...emptyVariantForm(),
++      ...emptyVariantForm(productSizes),
++      images: baseImage ? [baseImage] : [],
++    });
++    setOpen(true);
++  };
++
++  // The product's own base colour (first entry of the "Colours" field on
++  // the main product form) -- only relevant when there's a real size
++  // spread to price separately. A single "Free Size" product has nothing
++  // to gain from a size-price grid, so the button below only shows once
++  // more than one size is selected.
++  const baseColorName = (productColors ?? '').split(',')[0]?.trim() || '';
++  const productSizeList = (productSizes ?? '')
++    .split(',')
++    .map((s) => s.trim())
++    .filter(Boolean);
++  const hasMultipleSizes = productSizeList.length > 1;
++  const baseColorAlreadyVariant = baseColorName
++    ? variants.some((v) => v.color.trim().toLowerCase() === baseColorName.toLowerCase())
++    : false;
++  const showConvertBaseColorButton = !!baseColorName && hasMultipleSizes && !baseColorAlreadyVariant;
++
++  // Turns the base colour into a proper variant row, pre-filled with its
++  // name, image and the product's sizes -- the admin just fills in
++  // price/stock per size and hits "Add Variant".
++  const openNewFromBaseColour = () => {
++    setEditing(null);
++    setForm({
++      ...emptyVariantForm(productSizes),
++      color: baseColorName,
++      colorHex: findPresetByName(baseColorName)?.hex ?? '',
+       images: baseImage ? [baseImage] : [],
++      isDefault: true,
+     });
+     setOpen(true);
+   };
+@@ -185,7 +240,7 @@ export default function ProductVariantsManager({
+             priceOverride: s.price_override != null ? String(s.price_override) : '',
+             sku: s.sku ?? '',
+           }))
+-        : [{ size: 'Free Size', stockQuantity: '3', priceOverride: '', sku: '' }],
++        : defaultSizeRows(productSizes),
+     });
+     setOpen(true);
+   };
+@@ -470,9 +525,23 @@ export default function ProductVariantsManager({
+             Each colour gets its own photos, SKU and per-size stock — managed right here.
+           </p>
+         </div>
+-        <Button type="button" size="sm" variant="outline" onClick={openNew} className="shrink-0 gap-1.5">
+-          <Plus className="h-3.5 w-3.5" /> Add colour
+-        </Button>
++        <div className="flex shrink-0 gap-1.5">
++          {showConvertBaseColorButton && (
++            <Button
++              type="button"
++              size="sm"
++              variant="outline"
++              onClick={openNewFromBaseColour}
++              className="gap-1.5"
++              title={`"${baseColorName}" is the product's own colour and isn't priced per-size yet`}
++            >
++              <Plus className="h-3.5 w-3.5" /> Add &quot;{baseColorName}&quot; as variant
++            </Button>
++          )}
++          <Button type="button" size="sm" variant="outline" onClick={openNew} className="gap-1.5">
++            <Plus className="h-3.5 w-3.5" /> Add colour
++          </Button>
++        </div>
+       </div>
+ 
+       {loading ? (
+diff --git a/components/admin/products-panel.tsx b/components/admin/products-panel.tsx
+index 0efc7ea..8ac5418 100644
+--- a/components/admin/products-panel.tsx
++++ b/components/admin/products-panel.tsx
+@@ -2371,6 +2371,8 @@ export default function ProductsPanel() {
+               productName={form.name}
+               productSku={form.sku}
+               baseImage={form.images[0]}
++              productColors={form.colors}
++              productSizes={form.sizes}
+               autoOpenAdd={autoOpenVariantAdd}
+               onAutoOpenAddHandled={() => setAutoOpenVariantAdd(false)}
+             />

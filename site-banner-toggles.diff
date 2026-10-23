@@ -1,0 +1,130 @@
+diff --git a/components/admin/settings-panel.tsx b/components/admin/settings-panel.tsx
+index a2d9667..7cb745a 100644
+--- a/components/admin/settings-panel.tsx
++++ b/components/admin/settings-panel.tsx
+@@ -844,8 +844,8 @@ export default function SettingsPanel() {
+       <div className="mt-8">
+         <h2 className="font-serif text-2xl font-bold text-primary">Site Banner</h2>
+         <p className="mt-1 text-sm text-muted-foreground">
+-          A promotional image shown at the top of every page (except checkout).
+-          Upload once and it appears storewide — no code needed.
++          A promotional image shown at the top of the page. Upload it once, then use the
++          toggles below to choose where it appears — home page, product pages, or both.
+         </p>
+       </div>
+ 
+@@ -896,8 +896,8 @@ export default function SettingsPanel() {
+               </label>
+             )}
+             <p className="text-xs text-muted-foreground">
+-              Wide images work best (e.g. 1600×400). Shows on every page except checkout.
+-              Remove it and the banner just disappears storewide.
++              Wide images work best (e.g. 1600×400). Use the toggles below to control where it
++              shows. Remove it and the banner disappears everywhere, regardless of the toggles.
+             </p>
+           </div>
+           <div className="grid gap-1.5">
+@@ -913,6 +913,34 @@ export default function SettingsPanel() {
+               Where the banner takes people if they click it. Leave blank for a non-clickable banner.
+             </p>
+           </div>
++          <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-4">
++            <div>
++              <Label htmlFor="banner-show-home">Show on home page</Label>
++              <p className="text-xs text-muted-foreground">
++                Banner appears at the top of the home page only when this is on.
++              </p>
++            </div>
++            <Switch
++              id="banner-show-home"
++              checked={!!bannerForm.show_on_home}
++              onCheckedChange={(checked) => saveBanner({ ...bannerForm, show_on_home: checked })}
++              disabled={savingBanner}
++            />
++          </div>
++          <div className="flex items-center justify-between gap-4">
++            <div>
++              <Label htmlFor="banner-show-product">Show on product page</Label>
++              <p className="text-xs text-muted-foreground">
++                Banner appears at the top of individual product pages only when this is on.
++              </p>
++            </div>
++            <Switch
++              id="banner-show-product"
++              checked={!!bannerForm.show_on_product}
++              onCheckedChange={(checked) => saveBanner({ ...bannerForm, show_on_product: checked })}
++              disabled={savingBanner}
++            />
++          </div>
+         </div>
+       )}
+ 
+diff --git a/components/site-banner.tsx b/components/site-banner.tsx
+index c3a0779..8c00b88 100644
+--- a/components/site-banner.tsx
++++ b/components/site-banner.tsx
+@@ -7,27 +7,36 @@ import Link from 'next/link';
+ import { fetchSiteBanner } from '@/lib/settings-api';
+ 
+ /**
+- * Site-wide promotional banner (set from Admin > Store Settings).
+- * Shows on every page EXCEPT checkout, so nothing distracts from
+- * completing the order there. Renders nothing until an image is set.
++ * Promotional banner (set from Admin > Store Settings). Only ever shows
++ * on the home page and/or individual product pages, and only on whichever
++ * of those two the admin has explicitly switched on (Admin > Settings >
++ * Site Banner > "Show on home page" / "Show on product page") — it no
++ * longer shows storewide by default. Renders nothing until an image is
++ * set and at least one of those toggles is on for the current page.
+  */
+ export default function SiteBanner() {
+   const pathname = usePathname();
+   const [imageUrl, setImageUrl] = useState('');
+   const [linkUrl, setLinkUrl] = useState('');
++  const [showOnHome, setShowOnHome] = useState(false);
++  const [showOnProduct, setShowOnProduct] = useState(false);
+ 
+   useEffect(() => {
+     fetchSiteBanner()
+       .then((b) => {
+         setImageUrl(b.image_url || '');
+         setLinkUrl(b.link_url || '');
++        setShowOnHome(!!b.show_on_home);
++        setShowOnProduct(!!b.show_on_product);
+       })
+       .catch(() => {});
+   }, []);
+ 
+-  const isCheckout = pathname?.startsWith('/checkout');
++  const isHome = pathname === '/';
++  const isProduct = pathname?.startsWith('/product/');
++  const allowedHere = (isHome && showOnHome) || (isProduct && showOnProduct);
+ 
+-  if (!imageUrl || isCheckout) return null;
++  if (!imageUrl || !allowedHere) return null;
+ 
+   const img = (
+     <Image
+diff --git a/lib/settings-api.ts b/lib/settings-api.ts
+index b4578c8..edd0173 100644
+--- a/lib/settings-api.ts
++++ b/lib/settings-api.ts
+@@ -530,11 +530,18 @@ export async function saveReturnAutomationSettings(settings: ReturnAutomationSet
+ export interface SiteBanner {
+   image_url: string;
+   link_url?: string;
++  // Per-page visibility toggles. Both default to false so an existing
++  // banner doesn't suddenly reappear storewide the moment this field
++  // ships — admin has to explicitly turn each one on.
++  show_on_home?: boolean;
++  show_on_product?: boolean;
+ }
+ 
+ const DEFAULT_SITE_BANNER: SiteBanner = {
+   image_url: '',
+   link_url: '',
++  show_on_home: false,
++  show_on_product: false,
+ };
+ 
+ export async function fetchSiteBanner(): Promise<SiteBanner> {

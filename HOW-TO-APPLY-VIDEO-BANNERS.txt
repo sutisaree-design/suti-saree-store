@@ -1,0 +1,34 @@
+HERO BANNERS — VIDEO SUPPORT — HOW TO APPLY
+=============================================
+
+Is zip me 6 files hain, apne repo (E-Commerce-ethnic) ke andar EXACT
+same path par copy-paste/replace karo (folder structure zip ke andar
+hi bataya hua hai):
+
+  1. lib/hero-banners-api.ts                              (REPLACE)
+  2. components/admin/hero-banners-panel.tsx               (REPLACE)
+  3. components/home/hero-banner-carousel.tsx               (REPLACE)
+  4. app/api/admin/hero-banners/route.ts                    (REPLACE)
+  5. app/api/admin/hero-banners/[id]/route.ts                (REPLACE)
+  6. supabase/migrations/20260815000000_hero_banners_video_support.sql
+                                                            (NEW FILE)
+
+STEPS
+-----
+1. Upar wali 5 files apne local repo me same path par paste karke
+   overwrite/replace kar do.
+2. 6th file (migration .sql) apne repo ke supabase/migrations/ folder
+   me bas copy kar do — ye NAYI file hai, kisi ko replace nahi karti.
+3. Supabase database par migration apply karo (Supabase dashboard >
+   SQL Editor me is file ka content paste + run karo, YA agar Supabase
+   CLI use karte ho to `supabase db push`).
+   >>> Migration apply kiye bina, naya "Video" toggle admin panel me
+       dikhega zaroor lekin save karte waqt error dega (kyunki
+       media_type/poster_url columns database me nahi honge).
+4. `git add .`
+   `git commit -m "Add video support to hero banners"`
+   `git push`
+5. Deploy hone ke baad: Admin > Hero Banners > Add Banner > "Video"
+   select karke test karo.
+
+Koi doubt ho to bata dena.

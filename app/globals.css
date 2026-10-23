@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Cream background */
+    --background: 40 38% 97%;
+    --foreground: 345 25% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 345 25% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 345 25% 14%;
+
+    /* Maroon primary */
+    --primary: 345 60% 28%;
+    --primary-foreground: 40 38% 97%;
+
+    /* Gold secondary */
+    --secondary: 43 70% 52%;
+    --secondary-foreground: 345 25% 14%;
+
+    --muted: 40 25% 93%;
+    --muted-foreground: 345 10% 40%;
+
+    /* Soft gold accent */
+    --accent: 43 60% 90%;
+    --accent-foreground: 345 60% 28%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 40 38% 97%;
+
+    --border: 40 25% 88%;
+    --input: 40 25% 88%;
+    --ring: 345 60% 28%;
+
+    --chart-1: 345 60% 28%;
+    --chart-2: 43 70% 52%;
+    --chart-3: 345 30% 50%;
+    --chart-4: 43 60% 70%;
+    --chart-5: 345 60% 45%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 345 30% 8%;
+    --foreground: 40 38% 95%;
+    --card: 345 30% 12%;
+    --card-foreground: 40 38% 95%;
+    --popover: 345 30% 12%;
+    --popover-foreground: 40 38% 95%;
+    --primary: 43 70% 52%;
+    --primary-foreground: 345 30% 10%;
+    --secondary: 345 40% 35%;
+    --secondary-foreground: 40 38% 95%;
+    --muted: 345 20% 18%;
+    --muted-foreground: 40 15% 70%;
+    --accent: 345 30% 20%;
+    --accent-foreground: 43 70% 52%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 40 38% 95%;
+    --border: 345 20% 22%;
+    --input: 345 20% 22%;
+    --ring: 43 70% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply overflow-x-clip;
+    /* Radix UI (Select, Dialog, etc.) locks body scroll while open, which
+       removes the scrollbar and shifts all page content sideways. Reserving
+       a stable gutter keeps that width constant so nothing jumps when a
+       dropdown/filter/modal opens or closes. */
+    scrollbar-gutter: stable;
+  }
+  /* Radix's scroll-lock (react-remove-scroll) also injects its own inline
+     padding-right on <html>/<body> to compensate for the scrollbar it hides,
+     on top of the gutter already reserved above -- that's the extra shift
+     still visible after adding scrollbar-gutter alone. Zero it out since the
+     gutter already does that job. */
+  html[data-scroll-locked],
+  body[data-scroll-locked] {
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+  }
+  body {
+    @apply bg-background text-foreground overflow-x-clip;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+  h1, h2, h3, h4, h5 {
+    @apply font-serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .container-boutique {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .product-card-hover {
+    @apply transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl;
+  }
+  .gold-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-secondary/60 to-transparent;
+  }
+}
+
+/* Sonner (toast library) hardcodes `top: 20px` for top-positioned toasts
+   below a 600px viewport width, in its own injected stylesheet — this
+   overrides the `offset="68px"` prop passed to <Toaster> on mobile, which
+   is why the "Coupon applied" toast was sitting on top of the sticky
+   header (h-12 = 48px) and hiding the hamburger menu/logo. Not a Tailwind
+   utility since it targets sonner's own data-attribute selectors; needs
+   !important because sonner's <style> tag is injected client-side after
+   our stylesheet, so it would otherwise win the cascade at equal
+   specificity. Keep this offset in sync with the header's height. */
+@media (max-width: 600px) {
+  [data-sonner-toaster][data-y-position='top'] {
+    top: 60px !important;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Premium "Buy Now" highlight sweep -- a soft diagonal light streak that
+     glides across the button on its own, on a loop, so it catches a
+     visitor's eye without needing a hover/tap. Runs continuously (no
+     :hover trigger) with a pause between passes so it stays classy
+     instead of feeling like a spinner. Safe on any solid-color button:
+     the glow layer sits above the background but below the label via
+     z-index, and pointer-events: none keeps clicks passing through to
+     the real button underneath. */
+  .btn-shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-shine > * {
+    position: relative;
+    z-index: 1;
+  }
+  .btn-shine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    top: 0;
+    left: -75%;
+    width: 45%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      115deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.65) 50%,
+      transparent 100%
+    );
+    transform: skewX(-20deg);
+    animation: btn-shine-sweep 2.8s ease-in-out infinite;
+  }
+  @keyframes btn-shine-sweep {
+    0% {
+      left: -75%;
+    }
+    35% {
+      left: 125%;
+    }
+    100% {
+      left: 125%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-shine::after {
+      animation: none;
+      display: none;
+    }
+  }
+}
+
+/* Admin notification-bell deep link: briefly highlights the item that was
+   clicked in the bell (see components/admin/use-admin-focus.ts). */
+@keyframes admin-focus-flash {
+  0%, 60% {
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.55);
+    background-color: hsl(var(--primary) / 0.10);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
+}
+.admin-focus-flash {
+  animation: admin-focus-flash 4.5s ease-out;
+  border-radius: 0.5rem;
+}

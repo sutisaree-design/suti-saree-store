@@ -1,0 +1,62 @@
+diff --git a/app/media/[...path]/route.ts b/app/media/[...path]/route.ts
+index eca213a..13fbdc2 100644
+--- a/app/media/[...path]/route.ts
++++ b/app/media/[...path]/route.ts
+@@ -69,7 +69,7 @@ async function isProxyEnabled(): Promise<boolean> {
+   return value;
+ }
+ 
+-export async function GET(_req: NextRequest, { params }: { params: { path: string[] } }) {
++export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+   if (!SUPABASE_URL || !params.path || params.path.length === 0) {
+     return new NextResponse('Not found', { status: 404 });
+   }
+@@ -85,25 +85,45 @@ export async function GET(_req: NextRequest, { params }: { params: { path: strin
+     return NextResponse.redirect(upstreamUrl, 307);
+   }
+ 
++  // Forward Range requests upstream. This matters for <video> playback:
++  // mobile Safari (and Chrome on Android for larger files) opens every
++  // video with a Range request and expects a 206 Partial Content reply
++  // with Content-Range/Accept-Ranges back. Previously this route ignored
++  // the incoming Range header entirely and always answered 200 with the
++  // full body -- Safari in particular treats that as "this server can't
++  // be scrubbed/streamed" and silently refuses to start playback, which
++  // is why hero-banner and product videos would autoplay fine on desktop
++  // (no Range request there) but never even start on iOS.
++  const range = req.headers.get('range');
+   let upstream: Response;
+   try {
+-    upstream = await fetch(upstreamUrl);
++    upstream = await fetch(upstreamUrl, range ? { headers: { Range: range } } : undefined);
+   } catch {
+     return new NextResponse('Upstream fetch failed', { status: 502 });
+   }
+ 
+-  if (!upstream.ok || !upstream.body) {
++  if (!upstream.ok && upstream.status !== 206) {
++    return new NextResponse('Not found', { status: 404 });
++  }
++  if (!upstream.body) {
+     return new NextResponse('Not found', { status: 404 });
+   }
+ 
+   const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+   const contentLength = upstream.headers.get('content-length');
++  const contentRange = upstream.headers.get('content-range');
++  const isPartial = upstream.status === 206;
+ 
+   return new NextResponse(upstream.body, {
+-    status: 200,
++    status: isPartial ? 206 : 200,
+     headers: {
+       'Content-Type': contentType,
+       ...(contentLength ? { 'Content-Length': contentLength } : {}),
++      ...(contentRange ? { 'Content-Range': contentRange } : {}),
++      // Tells the browser up front that range requests are supported, so
++      // Safari issues them (and trusts the responses) instead of falling
++      // back to a single full-file download before it'll play anything.
++      'Accept-Ranges': 'bytes',
+       // Uploaded files are never mutated in place (re-uploads get a new
+       // filename), so it's safe for browsers/CDNs/crawlers to cache these
+       // indefinitely instead of re-fetching through this proxy every time.

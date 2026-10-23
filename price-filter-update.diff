@@ -1,0 +1,184 @@
+diff --git a/app/admin/page.tsx b/app/admin/page.tsx
+index 92d9cf0..8182bf5 100644
+--- a/app/admin/page.tsx
++++ b/app/admin/page.tsx
+@@ -6,6 +6,7 @@ import AdminShell, { type AdminSection } from '@/components/admin/admin-shell';
+ import ProductsPanel from '@/components/admin/products-panel';
+ import OrdersPanel from '@/components/admin/orders-panel';
+ import CategoriesPanel from '@/components/admin/categories-panel';
++import PriceRangeFiltersPanel from '@/components/admin/price-range-filters-panel';
+ import CollectionsPanel from '@/components/admin/collections-panel';
+ import BlogPanel from '@/components/admin/blog-panel';
+ import ReviewsPanel from '@/components/admin/reviews-panel';
+@@ -42,6 +43,7 @@ const PANELS: Record<AdminSection, React.ComponentType> = {
+   analytics: AnalyticsPanel,
+   products: ProductsPanel,
+   categories: CategoriesPanel,
++  'price-filters': PriceRangeFiltersPanel,
+   collections: CollectionsPanel,
+   blog: BlogPanel,
+   reviews: ReviewsPanel,
+diff --git a/app/shop/shop-content.tsx b/app/shop/shop-content.tsx
+index 7f3b2ec..53dc476 100644
+--- a/app/shop/shop-content.tsx
++++ b/app/shop/shop-content.tsx
+@@ -37,7 +37,15 @@ import { trackEvent } from '@/lib/track-api';
+ import { fireGtagEvent } from '@/lib/gtag-track';
+ import { blurDataURL } from '@/lib/utils';
+ import QuickNavIcons from '@/components/quick-nav-icons';
+-import { fetchCatalogVideoSettings, fetchCatalogListingSettings, DEFAULT_CATALOG_LISTING_SETTINGS } from '@/lib/settings-api';
++import PriceRangeFilterBar from '@/components/shop/price-range-filter-bar';
++import {
++  fetchCatalogVideoSettings,
++  fetchCatalogListingSettings,
++  DEFAULT_CATALOG_LISTING_SETTINGS,
++  fetchPriceRangeFilters,
++  DEFAULT_PRICE_RANGE_FILTERS,
++  PriceRangeBucket,
++} from '@/lib/settings-api';
+ 
+ const CATALOG_VIDEO_PREF_KEY = 'aruhi-catalog-video-enabled';
+ 
+@@ -107,6 +115,32 @@ function ShopContentInner({
+   const [selectedFabrics, setSelectedFabrics] = useState<string[]>([]);
+   const [selectedOccasions, setSelectedOccasions] = useState<string[]>([]);
+   const [priceRange, setPriceRange] = useState<[number, number]>([0, 35000]);
++  // "Shop by Price" scrollable chip bar -- the active bucket (or null when
++  // "All Prices"/the slider is being used instead). Buckets themselves are
++  // admin-managed (see fetchPriceRangeFilters below), so this only tracks
++  // which one -- if any -- is currently selected.
++  const [priceBuckets, setPriceBuckets] = useState<PriceRangeBucket[]>(DEFAULT_PRICE_RANGE_FILTERS);
++  const [activePriceBucketId, setActivePriceBucketId] = useState<string | null>(null);
++  useEffect(() => {
++    let cancelled = false;
++    fetchPriceRangeFilters()
++      .then((ranges) => {
++        if (!cancelled) setPriceBuckets(ranges);
++      })
++      .catch(() => {});
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++  const handlePriceBucketSelect = (bucket: PriceRangeBucket | null) => {
++    if (bucket) {
++      setActivePriceBucketId(bucket.id);
++      setPriceRange([bucket.min, bucket.max]);
++    } else {
++      setActivePriceBucketId(null);
++      setPriceRange([0, 35000]);
++    }
++  };
+   const initialSort = (params.get('sort') as SortKey) || 'popularity';
+   const [query, setQuery] = useState(initialQuery);
+   const [sort, setSort] = useState<SortKey>(initialSort);
+@@ -443,6 +477,7 @@ function ShopContentInner({
+     setSelectedFabrics([]);
+     setSelectedOccasions([]);
+     setPriceRange([0, 35000]);
++    setActivePriceBucketId(null);
+     setQuery('');
+     if (imageSearchIds) clearImageSearch();
+   };
+@@ -599,7 +634,10 @@ function ShopContentInner({
+           max={35000}
+           step={500}
+           value={[priceRange[0], priceRange[1]]}
+-          onValueChange={(v) => setPriceRange([v[0], v[1]] as [number, number])}
++          onValueChange={(v) => {
++            setPriceRange([v[0], v[1]] as [number, number]);
++            setActivePriceBucketId(null);
++          }}
+           className="py-4"
+         />
+         <div className="flex items-center justify-between text-xs text-muted-foreground">
+@@ -771,6 +809,13 @@ function ShopContentInner({
+             </button>
+           ))}
+         </div>
++
++        <PriceRangeFilterBar
++          ranges={priceBuckets}
++          activeId={activePriceBucketId}
++          onSelect={handlePriceBucketSelect}
++          className="mt-4"
++        />
+       </div>
+ 
+       <div className="flex gap-8">
+diff --git a/components/admin/admin-shell.tsx b/components/admin/admin-shell.tsx
+index ef01a6e..623a354 100644
+--- a/components/admin/admin-shell.tsx
++++ b/components/admin/admin-shell.tsx
+@@ -39,6 +39,7 @@ import {
+   EyeOff,
+   Download,
+   Flame,
++  IndianRupee,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import NotificationBell from './notification-bell';
+@@ -47,6 +48,7 @@ export type AdminSection =
+   | 'analytics'
+   | 'products'
+   | 'categories'
++  | 'price-filters'
+   | 'collections'
+   | 'blog'
+   | 'reviews'
+@@ -100,6 +102,7 @@ const NAV_GROUPS: NavGroup[] = [
+     items: [
+       { value: 'products', label: 'Products', icon: Package },
+       { value: 'categories', label: 'Categories', icon: FolderTree },
++      { value: 'price-filters', label: 'Price Filters', icon: IndianRupee },
+       { value: 'collections', label: 'Collections', icon: Layers },
+       { value: 'blog', label: 'Blog', icon: Newspaper },
+       { value: 'reviews', label: 'Reviews', icon: Star },
+diff --git a/lib/settings-api.ts b/lib/settings-api.ts
+index 9256402..c0efe69 100644
+--- a/lib/settings-api.ts
++++ b/lib/settings-api.ts
+@@ -912,3 +912,43 @@ export async function saveMediaStorageBackendSettings(settings: MediaStorageBack
+     cloudflare_purge: { attempted: boolean; ok: boolean; error?: string };
+   };
+ }
++
++// ---------------------------------------------------------------------
++// Shop price-range quick filters — the horizontally scrollable "Under
++// ₹499 / ₹499-₹699 / ..." chip bar shown on the Shop page. Admin-managed
++// (Admin > Catalog > Price Filters) so the buckets can be added, edited,
++// reordered or removed without a code change/deploy.
++// ---------------------------------------------------------------------
++export interface PriceRangeBucket {
++  id: string;
++  label: string;
++  min: number;
++  max: number;
++}
++
++export const DEFAULT_PRICE_RANGE_FILTERS: PriceRangeBucket[] = [
++  { id: 'pr-1', label: 'Under ₹499', min: 100, max: 499 },
++  { id: 'pr-2', label: '₹499 - ₹699', min: 499, max: 699 },
++  { id: 'pr-3', label: '₹699 - ₹899', min: 699, max: 899 },
++  { id: 'pr-4', label: '₹899 - ₹1000', min: 899, max: 1000 },
++  { id: 'pr-5', label: '₹1000 - ₹5000', min: 1000, max: 5000 },
++];
++
++export async function fetchPriceRangeFilters(): Promise<PriceRangeBucket[]> {
++  const { data, error } = await supabase
++    .from('settings')
++    .select('value')
++    .eq('key', 'price_range_filters')
++    .maybeSingle();
++  if (error || !data) return DEFAULT_PRICE_RANGE_FILTERS;
++  const ranges = (data.value as { ranges?: PriceRangeBucket[] } | null)?.ranges;
++  if (!Array.isArray(ranges) || ranges.length === 0) return DEFAULT_PRICE_RANGE_FILTERS;
++  return ranges;
++}
++
++export async function savePriceRangeFilters(ranges: PriceRangeBucket[]) {
++  const { error } = await supabase
++    .from('settings')
++    .upsert({ key: 'price_range_filters', value: { ranges } }, { onConflict: 'key' });
++  if (error) throw error;
++}

@@ -1,0 +1,108 @@
+diff --git a/app/api/chat/ai/route.ts b/app/api/chat/ai/route.ts
+index c372319..1fee2c8 100644
+--- a/app/api/chat/ai/route.ts
++++ b/app/api/chat/ai/route.ts
+@@ -1,5 +1,6 @@
+ import { NextResponse } from 'next/server';
+ import { getCurrentUser, getSupabaseServer } from '@/lib/supabase-server-auth';
++import { getSupabaseAdmin } from '@/lib/supabase-admin';
+ import { fetchLegalPagesResolved } from '@/lib/marketing-api';
+ import { fetchAiChatSettingsServer, DEFAULT_AI_CHAT_SETTINGS } from '@/lib/settings-api';
+ 
+@@ -42,10 +43,85 @@ interface IncomingMessage {
+   content: string;
+ }
+ 
+-async function buildCustomerContext(): Promise<string> {
++const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
++// Matches a full order UUID or the shortened #XXXXXXXX form shown in the admin panel.
++const ORDER_ID_REGEX = /\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b|#?[0-9a-fA-F]{8}\b/;
++
++// Guests aren't logged in, so they have no session-based orders. But they'll
++// often paste their order ID and/or checkout email straight into the chat —
++// scan the conversation for those and look the order up directly, the same
++// way the deterministic /api/chat/order-lookup endpoint does for guests.
++async function buildGuestOrderContext(history: IncomingMessage[]): Promise<string | null> {
++  const combinedText = history.map((m) => m.content).join('\n');
++
++  const emailMatch = combinedText.match(EMAIL_REGEX);
++  const orderIdMatch = combinedText.match(ORDER_ID_REGEX);
++
++  if (!emailMatch && !orderIdMatch) return null;
++
++  try {
++    const supabase = getSupabaseAdmin();
++    const email = emailMatch?.[0]?.toLowerCase();
++    const cleanedId = orderIdMatch?.[0]?.replace(/^#/, '').toUpperCase();
++
++    let query = supabase
++      .from('orders')
++      .select('id, status, items, total_amount, created_at, tracking_number, courier_name, customer_email')
++      .order('created_at', { ascending: false })
++      .limit(30);
++
++    if (email) query = query.eq('customer_email', email);
++
++    const { data: orders, error } = await query;
++    if (error) throw error;
++
++    let candidates = orders || [];
++    if (cleanedId) {
++      candidates = candidates.filter((o: any) => String(o.id).toUpperCase().startsWith(cleanedId));
++    }
++
++    if (candidates.length === 0) {
++      if (email && !cleanedId) {
++        return `Guest shopper gave email ${email}. No orders found in the system for that email — tell them plainly no order was found for it and ask them to double-check, or share the order ID too.`;
++      }
++      if (cleanedId && !email) {
++        return `Guest shopper gave order ID #${cleanedId}. No order in the system starts with that ID — ask them to double check both the order ID and confirm the checkout email, since guest lookups require both to match.`;
++      }
++      return `Guest shopper gave order ID #${cleanedId} and email ${email}. No order matches both together — tell them plainly this exact combination wasn't found and ask them to double-check the order ID and the email used at checkout.`;
++    }
++
++    const lines = candidates.slice(0, 5).map((o: any) => {
++      const shortId = `#${String(o.id).slice(0, 8).toUpperCase()}`;
++      const itemNames = Array.isArray(o.items)
++        ? o.items.map((i: any) => i?.product_name).filter(Boolean).join(', ')
++        : '';
++      const trackingBit = o.tracking_number
++        ? `, courier: ${o.courier_name || 'assigned courier'}, tracking number: ${o.tracking_number}`
++        : ', tracking number not yet assigned';
++      return `${shortId} — status: ${o.status}, placed ${new Date(o.created_at).toLocaleDateString('en-IN')}${trackingBit}, items: ${itemNames || 'n/a'}`;
++    });
++
++    return [
++      `Guest shopper (not logged in) — matched order(s) from the email/order ID they gave in chat.`,
++      `Use these EXACT order IDs and statuses, never invent one:`,
++      lines.join(' | '),
++    ].join('\n');
++  } catch (err) {
++    console.error('[chat/ai] guest order lookup failed:', err);
++    return null;
++  }
++}
++
++async function buildCustomerContext(history: IncomingMessage[]): Promise<string> {
+   try {
+     const user = await getCurrentUser();
+-    if (!user) return 'This visitor is not logged in — a first-time or guest browser. No order data available.';
++    if (!user) {
++      const guestContext = await buildGuestOrderContext(history);
++      return (
++        guestContext ||
++        'This visitor is not logged in — a first-time or guest browser. No order data available yet; if they ask about an order, ask for their Order ID and the email used at checkout.'
++      );
++    }
+ 
+     const supabase = await getSupabaseServer();
+     const { data: orders } = await supabase
+@@ -180,7 +256,7 @@ export async function POST(req: Request) {
+   }
+ 
+   const [customerContext, policyContext] = await Promise.all([
+-    buildCustomerContext(),
++    buildCustomerContext(history),
+     buildPolicyContext(),
+   ]);
+ 

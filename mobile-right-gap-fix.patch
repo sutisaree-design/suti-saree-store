@@ -1,0 +1,20 @@
+diff --git a/app/product/[slug]/product-detail.tsx b/app/product/[slug]/product-detail.tsx
+index 104d749..ff1ea0d 100644
+--- a/app/product/[slug]/product-detail.tsx
++++ b/app/product/[slug]/product-detail.tsx
+@@ -975,7 +975,14 @@ function ProductInfo({
+   const loyaltyBalanceWorth = Math.round(loyaltyBalance * loyaltySettings.redeem_value_per_point);
+ 
+   return (
+-    <div className="flex flex-col gap-3">
++    // min-w-0: this is a CSS grid column (see the `lg:grid-cols-2` parent in
++    // ProductDetail above). Without it, a non-wrapping horizontally-scrollable
++    // child -- like PriceQuickBrowseBar's chip row -- pushes this column's
++    // intrinsic min-width past the viewport on mobile instead of scrolling
++    // inside it, which silently clips the page's right-side gutter (globals.css
++    // sets overflow-x-clip on body). Matches the sibling gallery column, which
++    // already carries min-w-0 for the same reason.
++    <div className="min-w-0 flex flex-col gap-3">
+       <div>
+         <div className="flex items-start justify-between gap-3">
+           <div className="min-w-0 flex-1">

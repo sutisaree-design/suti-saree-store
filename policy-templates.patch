@@ -1,0 +1,22 @@
+diff --git a/lib/marketing-api.ts b/lib/marketing-api.ts
+index 916781f..a28aada 100644
+--- a/lib/marketing-api.ts
++++ b/lib/marketing-api.ts
+@@ -247,7 +247,7 @@ When you place an order, we save basic, non-identifying information on our own s
+ How We Use Your Information
+ We use your information to:
+ Process and fulfil your orders, including shipping and delivery
+-Communicate with you about your orders, account, or customer service requests
++Communicate with you about your orders (including confirming Cash on Delivery orders by email, WhatsApp, or SMS), account, or customer service requests
+ Send you promotional emails or WhatsApp messages, only if you have opted in
+ Operate optional programs you choose to join, such as loyalty points, referrals, gift cards, coupons, and reseller/wholesale accounts, and to calculate and apply any related rewards or discounts
+ Display product reviews and ratings you choose to submit
+@@ -296,7 +296,7 @@ Pricing and Payment
+ All prices listed on the website are in Indian Rupees (INR) and are inclusive of applicable taxes unless stated otherwise. We accept payments through the payment methods listed at checkout. We reserve the right to change prices at any time without prior notice, though this will not affect orders already confirmed.
+ 
+ Order Confirmation
+-An order is confirmed only after successful payment and receipt of an order confirmation email/message from us. We reserve the right to cancel any order due to stock unavailability, pricing errors, or suspected fraudulent activity, in which case a full refund will be issued.
++A prepaid order is confirmed once your online payment is successful and you receive an order confirmation email/message from us. A Cash on Delivery (COD) order is confirmed when you confirm it using the link we send by email/WhatsApp, or when our team confirms it with you by phone/WhatsApp; we may hold dispatch of a COD order until it is confirmed and may cancel it if we are unable to confirm it with you within a reasonable time. We reserve the right to cancel any order due to stock unavailability, pricing errors, or suspected fraudulent activity, in which case any amount you have paid will be refunded in full.
+ 
+ Discounts, Coupons and Online Payment Discount
+ From time to time we may offer coupon codes, checkout add-on offers, or an additional discount for choosing to pay online instead of Cash on Delivery. Any such discount is shown to you at checkout before you complete your order and applies only to that order; it is not a permanent price reduction, cannot be combined with other offers unless stated, has no cash value, and may be changed, withdrawn, or restricted (including by order value, product, or payment method) at our discretion without prior notice.

@@ -1,0 +1,77 @@
+INVOICE DOWNLOAD FIX
+=====================
+
+FILE CHANGED (only 1):
+  app/api/invoice/[id]/route.ts
+
+--------------------------------------------------------------
+ASLI PROBLEM KYA THI (root cause)
+--------------------------------------------------------------
+"Download Invoice" button hamesha fail ho raha tha (koi bhi order ho),
+kyunki us route ka Supabase query login-session/cookie ke bina anon key
+se chal raha tha.
+
+07/2026 mein ek security migration laga tha
+(supabase/migrations/20260827000000_lock_orders_order_items_pii.sql)
+jisne "orders" table ki RLS policy change kar di -- ab anon key se
+orders table read nahi ho sakti, sirf logged-in session (cookie) ya
+service-role key se hoti hai.
+
+Invoice route ye update miss kar gaya tha, isliye Supabase se order
+hamesha "not found" wapas aata tha -> route JSON error return karta
+tha -> lekin button pe `download` attribute hone ki wajah se browser
+usi JSON error ko file ki tarah download karne ki koshish karta tha
+-> isliye woh ajeeb naam wali corrupt ".json" file dikh rahi thi
+(order ki poori UUID + .json), invoice ki PDF nahi.
+
+--------------------------------------------------------------
+FIX KYA KIYA
+--------------------------------------------------------------
+Invoice route ko wahi pattern diya jo already
+app/api/orders/[id]/cancel/route.ts mein use ho raha hai (isi repo
+mein), taaki dono cases sahi se kaam karein:
+
+  - Guest order (bina login ke order-confirmation / track page se
+    invoice): order id hi access token hai, login zaroori nahi.
+  - Account order (My Orders page se): sirf wahi logged-in user jiska
+    order hai (ya same email) invoice access kar sakta hai. Koi aur
+    nahi.
+
+Order ab service-role client (RLS bypass) se fetch hota hai, aur
+ownership check code mein manually hota hai -- exact wahi tarika jo
+cancel route already follow karta hai, so pura codebase consistent
+rehta hai.
+
+--------------------------------------------------------------
+FILE NAME / ORDER ID WALA POINT
+--------------------------------------------------------------
+Ye already sahi tha code mein -- bug fix hone ke baad automatically
+kaam karega:
+  filename="invoice-<order id ke pehle 8 characters>.pdf"
+
+Jaise Order #ca4df923 ka invoice download hoga to file ka naam hoga:
+  invoice-ca4df923.pdf
+Yani "Order #ca4df923" (jo My Orders page pe dikhta hai) se seedha
+match karega -- kaunsa order hai turant pata chal jayega.
+
+--------------------------------------------------------------
+APPLY KAISE KAREIN
+--------------------------------------------------------------
+1. Is zip mein se sirf ye file:
+     app/api/invoice/[id]/route.ts
+   apne project mein EXACT isi path par copy-paste/replace kar do
+   (E-Commerce-ethnic/app/api/invoice/[id]/route.ts).
+
+2. Fir apne terminal mein:
+     git add app/api/invoice/[id]/route.ts
+     git commit -m "Fix invoice download failing due to RLS lockdown"
+     git push
+
+3. Deploy hone ke baad "Download Invoice" test kar lena -- account
+   page se bhi aur order-confirmation (guest) page se bhi.
+
+Note: is fix ke liye SUPABASE_SERVICE_ROLE_KEY env var pehle se set
+hona chahiye (aapke project ke dusre admin routes -- jaise cancel
+order -- already isi key ko use karte hain, to agar wo already kaam
+kar rahe hain to ye bhi kaam karega, koi naya env var add nahi
+karna).

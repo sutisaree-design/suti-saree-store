@@ -1,0 +1,116 @@
+diff --git a/app/checkout/page.tsx b/app/checkout/page.tsx
+index ab71109..6b74177 100644
+--- a/app/checkout/page.tsx
++++ b/app/checkout/page.tsx
+@@ -151,6 +151,7 @@ export default function CheckoutPage() {
+     buyNowItem,
+     updateBuyNowQuantity,
+     clearBuyNow,
++    hydrated: cartHydrated,
+   } = useCart();
+   const { paymentDiscount } = usePaymentDiscount();
+   // Buy Now sends the shopper straight here with just the one item, kept
+@@ -503,6 +504,13 @@ export default function CheckoutPage() {
+   const [shippingSettings, setShippingSettings] = useState<ShippingSettings>(
+     DEFAULT_SHIPPING_SETTINGS
+   );
++  // True once the real shipping/GST settings have come back from the
++  // server (success or failure) — until then shippingSettings is just the
++  // hardcoded DEFAULT_SHIPPING_SETTINGS placeholder, which rarely matches
++  // the store's actual flat rate / free-shipping threshold / GST rate. On
++  // a slow mobile connection that gap is wide enough for the customer to
++  // see a wrong total before it snaps to the correct one.
++  const [shippingSettingsLoaded, setShippingSettingsLoaded] = useState(false);
+ 
+   // Loyalty points — only relevant for logged-in customers.
+   const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings>(
+@@ -537,9 +545,12 @@ export default function CheckoutPage() {
+   }, [trackingEmail, items, subtotal]);
+ 
+   useEffect(() => {
+-    fetchShippingSettings().then(setShippingSettings).catch(() => {
+-      // fall back to defaults already set above
+-    });
++    fetchShippingSettings()
++      .then(setShippingSettings)
++      .catch(() => {
++        // fall back to defaults already set above
++      })
++      .finally(() => setShippingSettingsLoaded(true));
+   }, []);
+ 
+   // Show the customer a real estimated delivery window for their own pincode
+@@ -1354,6 +1365,21 @@ export default function CheckoutPage() {
+     );
+   }
+ 
++  // Wait for the cart to finish reading from localStorage AND the real
++  // shipping/GST settings to come back before showing any totals. Skipping
++  // this shows the customer a price computed from empty/placeholder data
++  // for a moment, which only self-corrects once something else forces a
++  // re-render (e.g. the address bar hiding on scroll on mobile) — the bug
++  // was never the resize itself, just that it happened to trigger the fix.
++  if (!cartHydrated || !shippingSettingsLoaded) {
++    return (
++      <div className="container-boutique flex flex-col items-center gap-3 py-24 text-center">
++        <Loader2 className="h-6 w-6 animate-spin text-primary" />
++        <p className="text-sm text-muted-foreground">Loading your order…</p>
++      </div>
++    );
++  }
++
+   if (items.length === 0) {
+     return (
+       <div className="container-boutique flex flex-col items-center gap-5 py-24 text-center">
+@@ -1483,7 +1509,7 @@ export default function CheckoutPage() {
+       <StickyOrderBar
+         items={items}
+         subtotal={subtotal}
+-        mrpTotal={mrpTotal}
++        mrpTotal={subtotal + shipping}
+         shipping={shipping}
+         payableTotal={payableTotal}
+         totalSavings={totalSavings}
+@@ -1947,8 +1973,15 @@ export default function CheckoutPage() {
+                         </div>
+                       )}
+                     </div>
+-                    <span className="self-center text-xs font-semibold">
+-                      {formatINR(item.product.price * item.quantity)}
++                    <span className="flex shrink-0 flex-col items-end self-center gap-0.5">
++                      {item.product.mrp && item.product.mrp > item.product.price && (
++                        <span className="text-[10px] text-muted-foreground line-through">
++                          {formatINR(item.product.mrp * item.quantity)}
++                        </span>
++                      )}
++                      <span className="text-xs font-semibold">
++                        {formatINR(item.product.price * item.quantity)}
++                      </span>
+                     </span>
+                   </li>
+                 );
+diff --git a/lib/cart-context.tsx b/lib/cart-context.tsx
+index c09da54..0350c76 100644
+--- a/lib/cart-context.tsx
++++ b/lib/cart-context.tsx
+@@ -295,6 +295,12 @@ interface CartContextValue {
+   startBuyNow: (product: Product, size: string, quantity?: number, feedItemId?: string) => void;
+   updateBuyNowQuantity: (quantity: number) => void;
+   clearBuyNow: () => void;
++  /** True once the cart has finished reading from localStorage on mount.
++   *  Pages that compute totals (checkout, cart) should wait for this before
++   *  rendering prices — otherwise they briefly render against the empty
++   *  initial state before the real cart loads in, showing a wrong total
++   *  for a moment (most visible on slower mobile devices). */
++  hydrated: boolean;
+ }
+ 
+ const CartContext = createContext<CartContextValue | undefined>(undefined);
+@@ -528,6 +534,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
+     startBuyNow,
+     updateBuyNowQuantity,
+     clearBuyNow,
++    hydrated,
+   };
+ 
+   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

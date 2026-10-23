@@ -1,0 +1,169 @@
+diff --git a/components/admin/products-panel.tsx b/components/admin/products-panel.tsx
+index e9b759e..6ac5f6d 100644
+--- a/components/admin/products-panel.tsx
++++ b/components/admin/products-panel.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { useState, FormEvent, useEffect, useMemo } from 'react';
++import { useState, FormEvent, useEffect, useMemo, useCallback, useRef } from 'react';
+ import Image from 'next/image';
+ import Link from 'next/link';
+ import { Plus, Pencil, Trash2, ArrowLeft, Upload, Loader2, Sparkles, Link2, Palette, Wand2, Search, X, Truck, Package } from 'lucide-react';
+@@ -16,6 +16,11 @@ import { searchPresets, ColorPreset } from '@/lib/color-presets';
+ import { Product, CategoryRow, ProductHighlights } from '@/lib/types';
+ import ProductVariantsManager from '@/components/admin/product-variants-manager';
+ import VendorSubmissionsPanel from '@/components/admin/vendor-submissions-panel';
++import {
++  fetchAdminVendorProducts,
++  type AdminVendorProductRow,
++  type VendorProductApprovalStatus,
++} from '@/lib/vendor-api';
+ import { formatINR } from '@/lib/format';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+@@ -45,6 +50,29 @@ import { toast } from 'sonner';
+ const DEFAULT_IMAGE =
+   'https://images.pexels.com/photos/1191349/pexels-photo-1191349.jpeg?auto=compress&cs=tinysrgb&w=800&h=1000&fit=crop';
+ 
++// Badge shown on the Catalog tab for vendor-submitted products that
++// aren't live yet, so an admin glancing at the main products list can
++// see at once that something is still being processed — same wording
++// vendors see on their own dashboard — instead of the product silently
++// not appearing at all (fetchProducts() only ever returns approval_status
++// = 'live' rows, by design, so those never show up in the table below).
++const IN_PROGRESS_STATUS_META: Partial<
++  Record<VendorProductApprovalStatus, { label: string; className: string }>
++> = {
++  pending_review: {
++    label: '⏳ Processing…',
++    className: 'bg-amber-50 text-amber-700 border-amber-200',
++  },
++  awaiting_stock: {
++    label: 'Awaiting Stock Pickup',
++    className: 'bg-blue-50 text-blue-700 border-blue-200',
++  },
++};
++
++// Poll interval (ms) while any vendor listing is still processing —
++// mirrors the vendor-facing dashboard's own polling.
++const IN_PROGRESS_POLL_INTERVAL = 12_000;
++
+ const slugify = (s: string) =>
+   s
+     .toLowerCase()
+@@ -260,6 +288,55 @@ export default function ProductsPanel() {
+     refresh();
+   }, [refresh]);
+ 
++  // ── In-progress vendor listings (shown as a banner on the Catalog tab) ──
++  // fetchProducts()/`products` above only ever contains approval_status =
++  // 'live' rows, so a vendor's just-submitted product is otherwise
++  // invisible here while it's still pending_review/awaiting_stock — the
++  // admin has to already know to check the separate Vendor Submissions
++  // tab. This polls the same admin vendor-products endpoint that tab
++  // uses and surfaces a lightweight summary right on Catalog too.
++  const [inProgressVendorProducts, setInProgressVendorProducts] = useState<AdminVendorProductRow[]>([]);
++  const inProgressPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
++
++  const loadInProgressVendorProducts = useCallback(() => {
++    fetchAdminVendorProducts()
++      .then((rows) => {
++        setInProgressVendorProducts(
++          rows.filter((r) => r.approval_status === 'pending_review' || r.approval_status === 'awaiting_stock')
++        );
++      })
++      .catch(() => {
++        // Non-critical — this is a supplementary banner, not the main
++        // product list, so fail silently rather than toasting an error
++        // every poll.
++      });
++  }, []);
++
++  useEffect(() => {
++    loadInProgressVendorProducts();
++  }, [loadInProgressVendorProducts]);
++
++  // Keep polling while anything is still 'pending_review' (being AI
++  // processed) — same idea as the vendor-facing dashboard's own polling.
++  // 'awaiting_stock' rows don't need polling since only an admin action
++  // changes that status, not a background process.
++  useEffect(() => {
++    const hasProcessing = inProgressVendorProducts.some((p) => p.approval_status === 'pending_review');
++    if (hasProcessing && !inProgressPollRef.current) {
++      inProgressPollRef.current = setInterval(loadInProgressVendorProducts, IN_PROGRESS_POLL_INTERVAL);
++    }
++    if (!hasProcessing && inProgressPollRef.current) {
++      clearInterval(inProgressPollRef.current);
++      inProgressPollRef.current = null;
++    }
++    return () => {
++      if (inProgressPollRef.current) {
++        clearInterval(inProgressPollRef.current);
++        inProgressPollRef.current = null;
++      }
++    };
++  }, [inProgressVendorProducts, loadInProgressVendorProducts]);
++
+   const openNew = () => {
+     setEditing(null);
+     setForm(emptyForm());
+@@ -546,6 +623,58 @@ export default function ProductsPanel() {
+         </Button>
+       </div>
+ 
++      {inProgressVendorProducts.length > 0 && (
++        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
++          <div className="flex flex-wrap items-center justify-between gap-2">
++            <p className="text-sm font-medium text-amber-800">
++              {inProgressVendorProducts.length} vendor listing
++              {inProgressVendorProducts.length === 1 ? '' : 's'} not live yet
++            </p>
++            <button
++              type="button"
++              onClick={() => setView('vendor-submissions')}
++              className="text-xs font-medium text-amber-800 underline underline-offset-2 hover:text-amber-900"
++            >
++              Review in Vendor Submissions →
++            </button>
++          </div>
++          <ul className="mt-3 flex flex-col gap-2">
++            {inProgressVendorProducts.map((p) => {
++              const meta = IN_PROGRESS_STATUS_META[p.approval_status];
++              return (
++                <li
++                  key={p.id}
++                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200/70 bg-white px-3 py-2"
++                >
++                  <div className="flex min-w-0 items-center gap-2">
++                    <div className="relative h-10 w-9 shrink-0 overflow-hidden rounded bg-muted">
++                      <Image
++                        src={p.images[0] || 'https://placehold.co/36x40?text=No+Image'}
++                        alt={p.name}
++                        fill
++                        sizes="36px"
++                        className="object-cover"
++                      />
++                    </div>
++                    <div className="min-w-0">
++                      <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
++                      <p className="truncate text-xs text-muted-foreground">
++                        {p.vendors?.business_name || 'Vendor'} · {p.category_name || '—'}
++                      </p>
++                    </div>
++                  </div>
++                  {meta && (
++                    <Badge variant="outline" className={`shrink-0 ${meta.className}`}>
++                      {meta.label}
++                    </Badge>
++                  )}
++                </li>
++              );
++            })}
++          </ul>
++        </div>
++      )}
++
+       {!loading && (
+         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+           <div className="relative w-full sm:max-w-xs">

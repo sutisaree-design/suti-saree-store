@@ -1,0 +1,93 @@
+// =====================================
+// components/category/category-toolbar-grid.tsx - UPDATED
+// =====================================
+//
+// LOCATION: Around line 50-150 (in the JSX return section)
+// ADD THIS: Quick filter buttons before the sort dropdown
+//
+
+// ✅ ADD THIS CODE (NEW):
+{/* Quick filter buttons for trending, bestseller, price drop */}
+<div className="flex gap-2 flex-wrap mb-4">
+  {/* TRENDING / POPULARITY - FIRST */}
+  <Button
+    variant={sort === 'popularity' ? 'default' : 'outline'}
+    size="sm"
+    onClick={() => setSort('popularity')}
+    className="gap-2"
+  >
+    <Flame size={16} />
+    Trending Now
+  </Button>
+
+  {/* BESTSELLER */}
+  <Button
+    variant={sort === 'rating' ? 'default' : 'outline'}
+    size="sm"
+    onClick={() => setSort('rating')}
+    className="gap-2"
+  >
+    Bestseller
+  </Button>
+
+  {/* PRICE DROP */}
+  <Button
+    variant={sort === 'price-drop' ? 'default' : 'outline'}
+    size="sm"
+    onClick={() => setSort('price-drop')}
+    className="gap-2"
+  >
+    <TrendingDown size={16} />
+    Price Drop
+  </Button>
+</div>
+
+{/* THEN: Keep your existing Select dropdown below */}
+<Select value={sort} onValueChange={setSort}>
+  <SelectTrigger className="w-full sm:w-auto">
+    <SelectValue placeholder="Sort by" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="featured">Featured</SelectItem>
+    <SelectItem value="price-asc">Price: Low to High</SelectItem>
+    <SelectItem value="price-desc">Price: High to Low</SelectItem>
+    <SelectItem value="rating">Bestseller</SelectItem>
+    <SelectItem value="newest">Newest</SelectItem>
+    <SelectItem value="popularity">Popularity</SelectItem>
+  </SelectContent>
+</Select>
+
+// =====================================
+// IMPORTS TO ADD (at the top of file)
+// =====================================
+// Make sure these are already imported:
+import { Flame, TrendingDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+// =====================================
+// RESULT
+// =====================================
+// 
+// Category Page will show:
+//
+// Sarees Category
+//
+// [Trending Now] [Bestseller] [Price Drop]
+//      ⭐ First
+//
+// Sort by: Popularity ▼
+//
+// Products sorted by popularity below
+//
+// =====================================
+// KEY POINTS
+// =====================================
+//
+// ✅ Popularity is FIRST quick button
+// ✅ Label is "Trending Now" (user-friendly)
+// ✅ Flame icon for visual appeal
+// ✅ Mobile responsive (flex-wrap)
+// ✅ Same styling as shop page
+// ✅ Sort dropdown still available as backup
+// ✅ Default sort is still 'popularity'
+//

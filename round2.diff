@@ -1,0 +1,50 @@
+--- a/app/shop/shop-content.tsx
++++ b/app/shop/shop-content.tsx
+@@ -125,12 +125,25 @@
+     let cancelled = false;
+     fetchPriceRangeFilters()
+       .then((ranges) => {
+-        if (!cancelled) setPriceBuckets(ranges);
++        if (cancelled) return;
++        setPriceBuckets(ranges);
++        // Landed here from the product page's "Shop by Price" quick-browse
++        // chips (?pricebucket=<id>) -- pre-apply that band once the admin's
++        // actual bucket list is loaded, same as picking it manually here.
++        const wantedId = params.get('pricebucket');
++        if (wantedId) {
++          const match = ranges.find((r) => r.id === wantedId);
++          if (match) {
++            setActivePriceBucketId(match.id);
++            setPriceRange([match.min, match.max]);
++          }
++        }
+       })
+       .catch(() => {});
+     return () => {
+       cancelled = true;
+     };
++    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, []);
+   const handlePriceBucketSelect = (bucket: PriceRangeBucket | null) => {
+     if (bucket) {
+diff --git a/app/product/[slug]/product-detail.tsx b/app/product/[slug]/product-detail.tsx
+index 8f717f8..104d749 100644
+--- a/app/product/[slug]/product-detail.tsx
++++ b/app/product/[slug]/product-detail.tsx
+@@ -41,6 +41,7 @@ import { fetchApprovedReviews, summarizeReviews, RatingSummary } from '@/lib/rev
+ import PincodeChecker from '@/components/product/pincode-checker';
+ import VariantSwatches from '@/components/product/variant-swatches';
+ import ProductHighlights from '@/components/product/product-highlights';
++import PriceQuickBrowseBar from '@/components/product/price-quick-browse-bar';
+ import BogoOfferSheet from '@/components/product/bogo-offer-sheet';
+ import SizeChart from '@/components/product/size-chart';
+ import ProductGallery from '@/components/product/product-gallery';
+@@ -1245,6 +1246,8 @@ function ProductInfo({
+           shopper is already looking at, gives a second clear path to
+           purchase instead of relying on the fixed bar being noticed. */}
+ 
++      <PriceQuickBrowseBar />
++
+       <ProductHighlights product={product} />
+ 
+       {!product.inStock && <NotifyMeForm productId={product.id} />}

@@ -1,0 +1,38 @@
+WHAT CHANGED
+============
+This version replaces the placeholder/sample product with your REAL
+products, pulled live from Supabase using the same helper your
+sitemap.ts already uses (fetchProductsServer, from lib/products-api-server.ts).
+
+No product data is hardcoded anymore — as soon as you add/edit/remove a
+product in Supabase, the feed updates automatically.
+
+HOW TO INSTALL
+===============
+1. In your repo, replace the existing file at:
+   app/rss.xml/route.ts
+   with the route.ts included in this zip (same path).
+
+2. Commit and push to GitHub. Vercel will auto-redeploy.
+
+3. Once deployed, open:
+   https://www.aruhihandlooms.com/rss.xml
+
+   You should see real products (sarees, lehenga, kurti, etc.) instead
+   of "Sample Ethnic Kurta".
+
+4. Validate the feed:
+   https://www.w3.org/feed/validate.php
+
+5. Paste the feed URL into Pinterest:
+   Settings > Import content > RSS Feed URL
+   https://www.aruhihandlooms.com/rss.xml
+   Click Save.
+
+NOTES
+=====
+- Only products where images[0] exists will show a picture in the feed.
+  Make sure every product in Supabase has at least one image.
+- Price is pulled directly from the "price" column (INR, whole rupees).
+- Out-of-stock products still appear in the feed but marked
+  "out of stock" — Pinterest may not show pricing/buy options for those.

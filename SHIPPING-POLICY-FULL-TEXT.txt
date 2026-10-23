@@ -1,0 +1,37 @@
+Where We Ship From
+All orders are packed and dispatched from our facility in Naihati, West Bengal, India.
+
+Our Courier Partners
+We ship using trusted logistics partners such as Delhivery and Shiprocket (and other reputed courier partners as needed), chosen based on serviceability to your pincode.
+
+Order Processing
+Orders are processed and dispatched within {{dispatch_days}} business days of order confirmation, excluding Sundays and public holidays. During sale periods, processing may take slightly longer.
+
+Prepaid and Cash on Delivery (COD) Orders
+Prepaid orders (UPI, cards, netbanking) are confirmed instantly on successful payment and are packed and dispatched ahead of Cash on Delivery orders in our processing queue.
+
+COD orders are confirmed when you tap the one-tap confirmation link we send by email/WhatsApp (or when our team confirms with you by phone/WhatsApp). Confirmed COD orders are dispatched after prepaid orders, so they may take slightly longer to reach you. We may hold an unconfirmed COD order until it is confirmed.
+
+Where an online-payment discount applies, it is shown at checkout before you pay. Product prices and delivery charges are otherwise the same for both payment methods, and the delivery timelines below apply from the date of dispatch for both.
+
+Delivery Timelines
+Metro cities: {{metro_days}} business days after dispatch
+Other cities/towns: {{other_days}} business days after dispatch
+Remote/rural areas: may take up to {{remote_days}} business days
+
+These are estimated timelines and may vary depending on courier partner delays, weather conditions, or other unforeseen circumstances.
+
+Shipping Charges
+Free shipping on all orders above {{free_shipping_threshold}}. A flat shipping charge of {{shipping_fee}} applies on orders below that amount.
+
+Order Tracking
+Once your order is dispatched, you will receive a tracking link via email/WhatsApp/SMS to track your shipment in real time.
+
+Delivery Attempts
+Our courier partners typically make up to 2-3 delivery attempts. If delivery is unsuccessful, the order may be returned to us, and you will be contacted to arrange re-delivery (additional shipping charges may apply).
+
+Damaged or Incorrect Items
+If you receive a damaged, defective, or incorrect item, please contact us within 48 hours of delivery with photos/video of the product and packaging, and we will arrange a replacement or refund as per our Refund & Cancellation Policy.
+
+International Shipping
+We currently ship only within India and do not offer international shipping at this time.

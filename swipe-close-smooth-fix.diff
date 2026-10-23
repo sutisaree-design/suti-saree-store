@@ -1,0 +1,21 @@
+diff --git a/components/product/product-gallery.tsx b/components/product/product-gallery.tsx
+index 502c769..7201e42 100644
+--- a/components/product/product-gallery.tsx
++++ b/components/product/product-gallery.tsx
+@@ -654,6 +654,16 @@ function Lightbox({
+       pullRef.current = null;
+       if (wasPulling) {
+         const finalY = pendingPullRef.current ?? pullY;
++        // A touchmove right before release can still have its once-per-frame
++        // applyPull() write queued (pullRafRef.current not cleared yet). If
++        // left alone, that frame lands a beat *after* the setPullY() below
++        // and re-applies the old mid-drag value, silently overwriting the
++        // release target we just committed -- the close/snap-back visibly
++        // stutters backwards for a frame, and since the close timeout below
++        // doesn't wait for it, the lightbox can get cut away mid-stutter.
++        // Same defensive nulling resetZoom() already does for the pinch/pan
++        // pending ref (see above), just applied to this gesture too.
++        pendingPullRef.current = null;
+         setPulling(false);
+         if (finalY > PULL_DISMISS_PX) {
+           // Let it keep sliding off-screen (same easing as the snap-back,

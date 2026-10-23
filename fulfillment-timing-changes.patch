@@ -1,0 +1,810 @@
+diff --git a/app/account/orders/[id]/page.tsx b/app/account/orders/[id]/page.tsx
+index ffc6ec9..7602640 100644
+--- a/app/account/orders/[id]/page.tsx
++++ b/app/account/orders/[id]/page.tsx
+@@ -6,12 +6,15 @@ import { Separator } from '@/components/ui/separator';
+ import ReturnRequestButton from '@/components/account/return-request-button';
+ import OrderTracking from '@/components/order/order-tracking';
+ import DeliveredItemReview from '@/components/account/delivered-item-review';
+-
+-const RETURN_WINDOW_DAYS = 7;
++import { fetchFulfillmentSettings } from '@/lib/marketing-api';
+ 
+ export default async function OrderDetailPage({ params }: { params: { id: string } }) {
+   const user = await getCurrentUser();
+   const supabase = await getSupabaseServer();
++  // Same number as Admin > Marketing > Shipping & Returns Timing, so a
++  // customer is never told "X-day returns" on one page and denied a
++  // return under a different window on this one.
++  const { return_window_days: RETURN_WINDOW_DAYS } = await fetchFulfillmentSettings();
+ 
+   const { data: order } = await supabase.from('orders').select('*').eq('id', params.id).single();
+   const ownsByEmail =
+diff --git a/app/api/chat/ai/route.ts b/app/api/chat/ai/route.ts
+index 251d1ec..70ac829 100644
+--- a/app/api/chat/ai/route.ts
++++ b/app/api/chat/ai/route.ts
+@@ -1,6 +1,6 @@
+ import { NextResponse } from 'next/server';
+ import { getCurrentUser, getSupabaseServer } from '@/lib/supabase-server-auth';
+-import { fetchLegalPages } from '@/lib/marketing-api';
++import { fetchLegalPagesResolved } from '@/lib/marketing-api';
+ import { fetchAiChatSettingsServer } from '@/lib/settings-api';
+ 
+ // ---------------------------------------------------------------------
+@@ -105,7 +105,7 @@ async function buildCustomerContext(): Promise<string> {
+ 
+ async function buildPolicyContext(): Promise<string> {
+   try {
+-    const legal = await fetchLegalPages();
++    const legal = await fetchLegalPagesResolved();
+     const shipping = legal['shipping-policy']?.replace(/\s+/g, ' ').trim().slice(0, 400) || '';
+     const refund = legal['refund-policy']?.replace(/\s+/g, ' ').trim().slice(0, 400) || '';
+     return `Shipping policy (paraphrase, don't quote verbatim): ${shipping || 'not set'}\nReturns/refund policy (paraphrase, don't quote verbatim): ${refund || 'not set'}`;
+diff --git a/app/api/merchant-feed/route.ts b/app/api/merchant-feed/route.ts
+index d636b60..95b90d2 100644
+--- a/app/api/merchant-feed/route.ts
++++ b/app/api/merchant-feed/route.ts
+@@ -1,6 +1,8 @@
+ import { NextResponse } from 'next/server';
+ import { getServerSupabase } from '@/lib/supabase-server';
+ import { fetchProductsServer } from '@/lib/products-api-server';
++import { fetchFulfillmentSettings } from '@/lib/marketing-api';
++import { fetchShippingSettings } from '@/lib/pincode-api';
+ 
+ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+ 
+@@ -32,6 +34,23 @@ export async function GET() {
+   const brand = marketing.merchant_feed_brand || 'Aruhi Handlooms';
+   const products = await fetchProductsServer();
+ 
++  // Same numbers as Admin > Marketing > Shipping & Returns Timing / GST &
++  // Shipping — declaring them here too means the feed can never say
++  // something different from what the site itself tells a shopper, which
++  // is exactly what Google Merchant Center checks for when it flags
++  // shipping/returns misrepresentation.
++  const [fulfillment, shipping] = await Promise.all([fetchFulfillmentSettings(), fetchShippingSettings()]);
++  const shippingBlock = `
++      <g:shipping>
++        <g:country>IN</g:country>
++        <g:service>Standard</g:service>
++        <g:price>${shipping.flat_rate.toFixed(2)} INR</g:price>
++      </g:shipping>
++      <g:min_handling_time>${fulfillment.dispatch_days_min}</g:min_handling_time>
++      <g:max_handling_time>${fulfillment.dispatch_days_max}</g:max_handling_time>
++      <g:min_transit_time>${fulfillment.delivery_metro_min}</g:min_transit_time>
++      <g:max_transit_time>${fulfillment.delivery_remote_max}</g:max_transit_time>`;
++
+   const items = products
+     .map((p) => {
+       const link = `${SITE_URL}/product/${p.slug}`;
+@@ -76,6 +95,7 @@ export async function GET() {
+       <g:age_group>${escapeXml(ageGroup)}</g:age_group>
+       ${material}
+       ${pattern}
++      ${shippingBlock}
+     </item>`;
+     })
+     .join('');
+diff --git a/app/home-client.tsx b/app/home-client.tsx
+index f85fac2..f489649 100644
+--- a/app/home-client.tsx
++++ b/app/home-client.tsx
+@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
+ import { ArrowRight, Sparkles, Truck, ShieldCheck } from 'lucide-react';
+ import { useProducts } from '@/lib/cart-context';
+ import { fetchSiteBanner, SiteBanner } from '@/lib/settings-api';
++import { fetchShippingSettings } from '@/lib/pincode-api';
+ import { fetchPublicCollections, PublicCollectionRow } from '@/lib/admin-collections-api';
+ import ProductCard from '@/components/product-card';
+ import CouponStrip from '@/components/home/coupon-strip';
+@@ -29,6 +30,16 @@ export default function HomeClient() {
+       .catch(() => setBanner(null));
+   }, []);
+ 
++  // Admin > Settings > GST & Shipping — the free-shipping threshold shown
++  // in the hero badge is the exact same number checkout actually charges
++  // against, so this line never contradicts what a shopper pays.
++  const [freeShippingThreshold, setFreeShippingThreshold] = useState<number | null>(null);
++  useEffect(() => {
++    fetchShippingSettings()
++      .then((s) => setFreeShippingThreshold(s.free_shipping_threshold || null))
++      .catch(() => setFreeShippingThreshold(null));
++  }, []);
++
+   // Admin > Collections — curated groupings (e.g. "Diwali Specials"),
+   // shown here the same way categories are: a row of clickable circles
+   // that link through to /collection/[slug]. Only ever contains active
+@@ -162,7 +173,9 @@ export default function HomeClient() {
+               style={{ animationDelay: '400ms' }}
+             >
+               <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-secondary" /> Authentic weaves</span>
+-              <span className="flex items-center gap-1.5"><Truck className="h-4 w-4 text-secondary" /> Free shipping over ₹2,000</span>
++              {freeShippingThreshold ? (
++                <span className="flex items-center gap-1.5"><Truck className="h-4 w-4 text-secondary" /> Free shipping over ₹{freeShippingThreshold.toLocaleString('en-IN')}</span>
++              ) : null}
+             </div>
+           </div>
+           <div className="relative hidden md:block">
+diff --git a/app/legal/[slug]/page.tsx b/app/legal/[slug]/page.tsx
+index a0372ca..a74f417 100644
+--- a/app/legal/[slug]/page.tsx
++++ b/app/legal/[slug]/page.tsx
+@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
+ import Link from 'next/link';
+ import type { Metadata } from 'next';
+ import { getServerSupabase } from '@/lib/supabase-server';
+-import { LEGAL_PAGE_TITLES, LegalPages, LegalSlug } from '@/lib/marketing-api';
++import { LEGAL_PAGE_TITLES, LegalPages, LegalSlug, applyFulfillmentTokens, fetchFulfillmentSettings } from '@/lib/marketing-api';
+ 
+ const VALID_SLUGS = Object.keys(LEGAL_PAGE_TITLES) as LegalSlug[];
+ 
+@@ -46,9 +46,12 @@ export default async function LegalPage({ params }: { params: { slug: string } }
+   const slug = params.slug as LegalSlug;
+   if (!VALID_SLUGS.includes(slug)) notFound();
+ 
+-  const pages = await getLegalPages();
++  const [pages, fulfillment] = await Promise.all([getLegalPages(), fetchFulfillmentSettings()]);
+   const title = LEGAL_PAGE_TITLES[slug];
+-  const content = pages[slug] || 'This page is being updated. Please check back soon.';
++  const rawContent = pages[slug] || 'This page is being updated. Please check back soon.';
++  // {{dispatch_days}}, {{return_days}}, etc. always reflect the live
++  // numbers from Admin > Marketing > Shipping & Returns Timing.
++  const content = applyFulfillmentTokens(rawContent, fulfillment);
+ 
+   return (
+     <div className="container-boutique max-w-3xl py-10 sm:py-14">
+diff --git a/app/product/[slug]/product-detail.tsx b/app/product/[slug]/product-detail.tsx
+index 596fe73..c33a612 100644
+--- a/app/product/[slug]/product-detail.tsx
++++ b/app/product/[slug]/product-detail.tsx
+@@ -15,6 +15,14 @@ import { fetchProductBySlug } from '@/lib/products-api';
+ import { fetchVariantBySlug, fetchVariantsForProduct, ProductVariant, VariantWithSizes } from '@/lib/variants-api';
+ import { Product } from '@/lib/types';
+ import { formatINR, discountPct } from '@/lib/format';
++import {
++  FulfillmentSettings,
++  DEFAULT_FULFILLMENT_SETTINGS,
++  fetchFulfillmentSettings,
++  shippingReturnsSummary,
++  returnWindowBadgeText,
++} from '@/lib/marketing-api';
++import { fetchShippingSettings } from '@/lib/pincode-api';
+ import { Button } from '@/components/ui/button';
+ import { Badge } from '@/components/ui/badge';
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+@@ -66,6 +74,8 @@ export default function ProductDetail() {
+   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+   const [quantity, setQuantity] = useState(1);
+   const [activeTab, setActiveTab] = useState('reviews');
++  const [fulfillment, setFulfillment] = useState<FulfillmentSettings>(DEFAULT_FULFILLMENT_SETTINGS);
++  const [freeShippingThreshold, setFreeShippingThreshold] = useState<number | undefined>(undefined);
+   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+   const [couponDiscount, setCouponDiscount] = useState(0);
+   const [couponHydrated, setCouponHydrated] = useState(false);
+@@ -118,6 +128,20 @@ export default function ProductDetail() {
+   // until the product has at least one real approved rating, so brand-new
+   // listings still show their seeded social-proof numbers.
+   const [liveSummary, setLiveSummary] = useState<RatingSummary | null>(null);
++  useEffect(() => {
++    let cancelled = false;
++    Promise.all([fetchFulfillmentSettings(), fetchShippingSettings()])
++      .then(([f, s]) => {
++        if (!cancelled) {
++          setFulfillment(f);
++          setFreeShippingThreshold(s.free_shipping_threshold || undefined);
++        }
++      })
++      .catch(() => {});
++    return () => {
++      cancelled = true;
++    };
++  }, []);
+   useEffect(() => {
+     if (!baseProduct?.id) {
+       setLiveSummary(null);
+@@ -514,6 +538,7 @@ export default function ProductDetail() {
+           onReviewsClick={goToReviews}
+           appliedCoupon={appliedCoupon}
+           couponDiscount={couponDiscount}
++          fulfillment={fulfillment}
+           onCouponApply={(c, d) => {
+             setAppliedCoupon(c);
+             setCouponDiscount(d);
+@@ -557,7 +582,7 @@ export default function ProductDetail() {
+             </ul>
+           </TabsContent>
+           <TabsContent value="shipping" className="max-w-3xl text-sm leading-relaxed text-foreground/80">
+-            <p>Free shipping on all orders above Rs 2,000. Dispatched within 2-3 business days. 7-day easy returns on unworn items with original packaging.</p>
++            <p>{shippingReturnsSummary(fulfillment, freeShippingThreshold)}</p>
+           </TabsContent>
+           <TabsContent value="reviews">
+             <ReviewsSection productId={baseProduct.id} productSlug={baseProduct.slug} />
+@@ -604,6 +629,7 @@ function ProductInfo({
+   couponDiscount,
+   onCouponApply,
+   onCouponRemove,
++  fulfillment,
+ }: {
+   product: Product;
+   displayRating: number;
+@@ -620,9 +646,9 @@ function ProductInfo({
+   couponDiscount: number;
+   onCouponApply: (coupon: Coupon, discount: number) => void;
+   onCouponRemove: () => void;
++  fulfillment: FulfillmentSettings;
+ }) {
+   const discount = discountPct(product.price, product.mrp);
+-  const [descExpanded, setDescExpanded] = useState(false);
+ 
+   return (
+     <div className="flex flex-col gap-3">
+@@ -714,23 +740,6 @@ function ProductInfo({
+ 
+       <LowStockBadge stockQuantity={selectedSizeStock} />
+ 
+-      <div>
+-        <p
+-          className={`text-sm leading-relaxed text-foreground/80 ${
+-            descExpanded ? '' : 'line-clamp-2'
+-          }`}
+-        >
+-          {product.description}
+-        </p>
+-        <button
+-          type="button"
+-          onClick={() => setDescExpanded((v) => !v)}
+-          className="mt-1 text-sm font-medium text-primary hover:underline"
+-        >
+-          {descExpanded ? 'Show less' : 'Show more'}
+-        </button>
+-      </div>
+-
+       <ProductHighlights product={product} />
+ 
+       {product.sizes.length > 1 && (
+@@ -792,7 +801,7 @@ function ProductInfo({
+         {[
+           { icon: Truck, label: 'Free Shipping' },
+           { icon: ShieldCheck, label: 'Authentic' },
+-          { icon: RefreshCw, label: '7-day Returns' },
++          { icon: RefreshCw, label: `${returnWindowBadgeText(fulfillment)} Returns` },
+         ].map((a) => (
+           <div key={a.label} className="flex flex-col items-center gap-1">
+             <a.icon className="h-5 w-5 text-secondary" />
+diff --git a/components/admin/marketing-panel.tsx b/components/admin/marketing-panel.tsx
+index 59b57bc..5036c29 100644
+--- a/components/admin/marketing-panel.tsx
++++ b/components/admin/marketing-panel.tsx
+@@ -20,6 +20,12 @@ import {
+   AnalyticsSettings,
+   fetchAnalyticsSettings,
+   saveAnalyticsSettings,
++  FulfillmentSettings,
++  DEFAULT_FULFILLMENT_SETTINGS,
++  fetchFulfillmentSettings,
++  saveFulfillmentSettings,
++  SHIPPING_POLICY_TEMPLATE,
++  REFUND_POLICY_TEMPLATE,
+ } from '@/lib/marketing-api';
+ import {
+   SocialPublishSettings,
+@@ -67,6 +73,7 @@ export default function MarketingPanel() {
+       <CardContent>
+         <Tabs defaultValue="legal">
+           <TabsList>
++            <TabsTrigger value="fulfillment">Shipping & Returns Timing</TabsTrigger>
+             <TabsTrigger value="legal">Legal Pages</TabsTrigger>
+             <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+             <TabsTrigger value="growth">Growth Tools</TabsTrigger>
+@@ -78,6 +85,7 @@ export default function MarketingPanel() {
+             <TabsTrigger value="social-publish">Social Auto-Post</TabsTrigger>
+           </TabsList>
+ 
++          <TabsContent value="fulfillment"><FulfillmentTimingTab /></TabsContent>
+           <TabsContent value="legal"><LegalPagesTab /></TabsContent>
+           <TabsContent value="whatsapp"><WhatsAppTab /></TabsContent>
+           <TabsContent value="growth"><GrowthTab /></TabsContent>
+@@ -93,6 +101,107 @@ export default function MarketingPanel() {
+   );
+ }
+ 
++// ---------------------------------------------------------------------
++// Shipping & Returns Timing — THE single place to set dispatch/delivery/
++// return/cancellation windows. Every other surface (product page,
++// footer badges, checkout trust badges, legal pages via {{tokens}},
++// live chat, order-return eligibility, and the Google Merchant Center
++// feed) reads from this one settings row, so changing a number here
++// updates the whole site at once — no more hunting through multiple
++// pages to keep the numbers consistent, and no risk of the site
++// contradicting what's declared to Google Merchant Center.
++// ---------------------------------------------------------------------
++
++function FulfillmentTimingTab() {
++  const [settings, setSettings] = useState<FulfillmentSettings | null>(null);
++  const [saving, setSaving] = useState(false);
++
++  useEffect(() => {
++    fetchFulfillmentSettings()
++      .then(setSettings)
++      .catch(() => toast.error('Failed to load shipping & returns timing'));
++  }, []);
++
++  const set = (key: keyof FulfillmentSettings, value: number) =>
++    setSettings((s) => (s ? { ...s, [key]: value } : s));
++
++  const onSubmit = async (e: FormEvent) => {
++    e.preventDefault();
++    if (!settings) return;
++    setSaving(true);
++    try {
++      await saveFulfillmentSettings(settings);
++      toast.success('Shipping & returns timing saved — this updates everywhere it\'s shown');
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : 'Save failed');
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  if (!settings) return <p className="py-6 text-sm text-muted-foreground">Loading...</p>;
++
++  const numField = (
++    key: keyof FulfillmentSettings,
++    label: string,
++  ) => (
++    <div className="space-y-1.5">
++      <Label htmlFor={key}>{label}</Label>
++      <Input
++        id={key}
++        type="number"
++        min={0}
++        value={settings[key]}
++        onChange={(e) => set(key, Number(e.target.value))}
++      />
++    </div>
++  );
++
++  return (
++    <form onSubmit={onSubmit} className="mt-4 space-y-6">
++      <p className="text-sm text-muted-foreground">
++        These numbers drive every "dispatched in X days" / "X-day returns" / "cancel within X hours"
++        message across the site — the product page, checkout badges, the footer, the live chat
++        widget, the legal pages (wherever they use a <code>{'{{token}}'}</code>, see below), and the
++        Google Merchant Center feed. Update them once here instead of editing each page separately.
++      </p>
++
++      <div className="space-y-3">
++        <h4 className="text-sm font-semibold">Dispatch (order confirmed → handed to courier)</h4>
++        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
++          {numField('dispatch_days_min', 'Min days')}
++          {numField('dispatch_days_max', 'Max days')}
++        </div>
++      </div>
++
++      <div className="space-y-3">
++        <h4 className="text-sm font-semibold">Delivery (courier pickup → doorstep), by zone</h4>
++        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
++          {numField('delivery_metro_min', 'Metro cities: min')}
++          {numField('delivery_metro_max', 'Metro cities: max')}
++          {numField('delivery_other_min', 'Other cities: min')}
++          {numField('delivery_other_max', 'Other cities: max')}
++          {numField('delivery_remote_min', 'Remote areas: min')}
++          {numField('delivery_remote_max', 'Remote areas: max')}
++        </div>
++      </div>
++
++      <div className="space-y-3">
++        <h4 className="text-sm font-semibold">Cancellation & returns</h4>
++        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
++          {numField('cancellation_window_hours', 'Cancel within (hours)')}
++          {numField('return_window_days', 'Return within (days)')}
++        </div>
++      </div>
++
++      <Button type="submit" disabled={saving} className="gap-2 bg-primary">
++        <Save className="h-4 w-4" />
++        {saving ? 'Saving...' : 'Save Shipping & Returns Timing'}
++      </Button>
++    </form>
++  );
++}
++
+ // ---------------------------------------------------------------------
+ // Legal Pages
+ // ---------------------------------------------------------------------
+@@ -143,6 +252,34 @@ function LegalPagesTab() {
+         ))}
+       </div>
+ 
++      {(activeSlug === 'shipping-policy' || activeSlug === 'refund-policy') && (
++        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs">
++          <p className="font-medium text-foreground">
++            Keep this in sync with Admin &gt; Marketing &gt; Shipping &amp; Returns Timing
++          </p>
++          <p className="mt-1 text-muted-foreground">
++            Use these tokens anywhere in the text below and they'll always show the live numbers
++            from the Shipping &amp; Returns Timing tab, instead of numbers you'd otherwise have to
++            update by hand every time they change:{' '}
++            <code>{'{{dispatch_days}}'}</code>, <code>{'{{metro_days}}'}</code>,{' '}
++            <code>{'{{other_days}}'}</code>, <code>{'{{remote_days}}'}</code>,{' '}
++            <code>{'{{return_days}}'}</code>, <code>{'{{cancellation_hours}}'}</code>.
++          </p>
++          <button
++            type="button"
++            onClick={() =>
++              setPages({
++                ...pages,
++                [activeSlug]: activeSlug === 'shipping-policy' ? SHIPPING_POLICY_TEMPLATE : REFUND_POLICY_TEMPLATE,
++              })
++            }
++            className="mt-2 rounded border border-primary/40 px-2 py-1 font-medium text-primary hover:bg-primary/10"
++          >
++            Replace with ready-made template (tokens included)
++          </button>
++        </div>
++      )}
++
+       <div className="space-y-2">
+         <Label htmlFor="legal-content">{LEGAL_PAGE_TITLES[activeSlug]} content</Label>
+         <Textarea
+diff --git a/components/checkout/trust-badges.tsx b/components/checkout/trust-badges.tsx
+index 4c3d797..0e8e6ee 100644
+--- a/components/checkout/trust-badges.tsx
++++ b/components/checkout/trust-badges.tsx
+@@ -1,10 +1,34 @@
++'use client';
++
++import { useEffect, useState } from 'react';
+ import { ShieldCheck, Lock, RotateCcw, Headset } from 'lucide-react';
++import {
++  FulfillmentSettings,
++  DEFAULT_FULFILLMENT_SETTINGS,
++  fetchFulfillmentSettings,
++  returnWindowBadgeText,
++} from '@/lib/marketing-api';
+ 
+ /**
+  * Checkout trust signals — sits right below the "Place Order" button.
+- * Pure presentational, no data dependency, so it's safe to drop in anywhere.
++ * Pulls the returns window from Admin > Marketing > Shipping & Returns
++ * Timing so it never drifts out of sync with the rest of the site.
+  */
+ export default function TrustBadges() {
++  const [fulfillment, setFulfillment] = useState<FulfillmentSettings>(DEFAULT_FULFILLMENT_SETTINGS);
++
++  useEffect(() => {
++    let cancelled = false;
++    fetchFulfillmentSettings()
++      .then((f) => {
++        if (!cancelled) setFulfillment(f);
++      })
++      .catch(() => {});
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
+   return (
+     <div className="mt-5 flex flex-col gap-4">
+       {/* Reassurance strip: SSL / secure payment / easy returns / support */}
+@@ -28,7 +52,7 @@ export default function TrustBadges() {
+         <div className="flex flex-col items-center gap-1 text-center">
+           <RotateCcw className="h-5 w-5 text-secondary" />
+           <span className="text-[10px] font-medium leading-tight text-muted-foreground">
+-            Easy 7-Day
++            Easy {returnWindowBadgeText(fulfillment)}
+             <br />
+             Returns
+           </span>
+diff --git a/components/live-chat-widget.tsx b/components/live-chat-widget.tsx
+index a8ea772..b9f8682 100644
+--- a/components/live-chat-widget.tsx
++++ b/components/live-chat-widget.tsx
+@@ -14,7 +14,17 @@ import {
+   Mail,
+   LifeBuoy,
+ } from 'lucide-react';
+-import { fetchMarketingSettings, fetchLegalPages, MarketingSettings, LegalPages } from '@/lib/marketing-api';
++import {
++  fetchMarketingSettings,
++  fetchLegalPagesResolved,
++  fetchFulfillmentSettings,
++  dispatchWindowText,
++  returnWindowText,
++  MarketingSettings,
++  LegalPages,
++  FulfillmentSettings,
++  DEFAULT_FULFILLMENT_SETTINGS,
++} from '@/lib/marketing-api';
+ 
+ // ---------------------------------------------------------------------
+ // On-site live chat widget.
+@@ -56,7 +66,7 @@ interface ChatMessage {
+ interface Topic {
+   key: string;
+   label: string;
+-  answer: (ctx: { legal: LegalPages | null; whatsappHref: string | null }) => string;
++  answer: (ctx: { legal: LegalPages | null; whatsappHref: string | null; fulfillment: FulfillmentSettings }) => string;
+ }
+ 
+ const SCRIPTED_TOPICS: Topic[] = [
+@@ -75,18 +85,22 @@ const SCRIPTED_TOPICS: Topic[] = [
+   {
+     key: 'delivery',
+     label: 'Delivery time & COD',
+-    answer: ({ legal }) =>
+-      legal?.['shipping-policy']?.trim()
+-        ? summarize(legal['shipping-policy'], 'Orders typically leave our warehouse within 2-3 business days, then take 3-7 days to arrive depending on your pincode.')
+-        : 'Orders typically leave our warehouse within 2-3 business days, then take 3-7 days to arrive depending on your pincode. Cash on Delivery availability is shown at checkout once you enter your pincode.',
++    answer: ({ legal, fulfillment }) => {
++      const fallback = `Orders typically leave our warehouse within ${dispatchWindowText(fulfillment)}, then take a few more days to arrive depending on your pincode.`;
++      return legal?.['shipping-policy']?.trim()
++        ? summarize(legal['shipping-policy'], fallback)
++        : `${fallback} Cash on Delivery availability is shown at checkout once you enter your pincode.`;
++    },
+   },
+   {
+     key: 'returns',
+     label: 'Returns & exchange',
+-    answer: ({ legal }) =>
+-      legal?.['refund-policy']?.trim()
+-        ? summarize(legal['refund-policy'], 'We accept returns and exchanges within 7 days of delivery on unworn items with original tags and packaging intact.')
+-        : 'We accept returns and exchanges within 7 days of delivery on unworn items with original tags and packaging intact. Customized or stitched pieces are usually final sale — check the product page for specifics.',
++    answer: ({ legal, fulfillment }) => {
++      const fallback = `We accept returns and exchanges within ${returnWindowText(fulfillment)} of delivery on unworn items with original tags and packaging intact.`;
++      return legal?.['refund-policy']?.trim()
++        ? summarize(legal['refund-policy'], fallback)
++        : `${fallback} Customized or stitched pieces are usually final sale — check the product page for specifics.`;
++    },
+   },
+   {
+     key: 'human',
+@@ -165,6 +179,7 @@ export default function LiveChatWidget() {
+   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
+   const [marketing, setMarketing] = useState<MarketingSettings | null>(null);
+   const [legal, setLegal] = useState<LegalPages | null>(null);
++  const [fulfillment, setFulfillment] = useState<FulfillmentSettings>(DEFAULT_FULFILLMENT_SETTINGS);
+   const [messages, setMessages] = useState<ChatMessage[]>([
+     {
+       id: uid(),
+@@ -195,11 +210,12 @@ export default function LiveChatWidget() {
+ 
+   useEffect(() => {
+     let cancelled = false;
+-    Promise.all([fetchMarketingSettings(), fetchLegalPages()])
+-      .then(([m, l]) => {
++    Promise.all([fetchMarketingSettings(), fetchLegalPagesResolved(), fetchFulfillmentSettings()])
++      .then(([m, l, f]) => {
+         if (!cancelled) {
+           setMarketing(m);
+           setLegal(l);
++          setFulfillment(f);
+         }
+       })
+       .catch(() => {
+@@ -482,7 +498,7 @@ export default function LiveChatWidget() {
+   }
+ 
+   function handleTopic(topic: Topic) {
+-    const answer = topic.answer({ legal, whatsappHref });
++    const answer = topic.answer({ legal, whatsappHref, fulfillment });
+     addUser(topic.label);
+     addBot(
+       answer === '__whatsapp__'
+diff --git a/lib/marketing-api.ts b/lib/marketing-api.ts
+index 6027c49..e8da5de 100644
+--- a/lib/marketing-api.ts
++++ b/lib/marketing-api.ts
+@@ -1,5 +1,175 @@
+ import { supabase } from './supabase';
+ 
++// ---------------------------------------------------------------------
++// Fulfillment timing: dispatch window, delivery windows by zone, return
++// window, and cancellation window.
++//
++// This is the SINGLE SOURCE OF TRUTH for every "dispatched in X days" /
++// "X-day returns" / "cancel within X hours" claim across the storefront
++// (product page, footer badges, checkout trust badges, legal pages, the
++// live chat widget, order-return eligibility, and the Google Merchant
++// Center feed). Change it once in Admin > Marketing > Shipping & Returns
++// Timing and every one of those surfaces stays in sync automatically —
++// which is exactly what keeps the on-site claims matching what's
++// declared to Google Merchant Center and avoids a shipping/returns
++// misrepresentation flag.
++// ---------------------------------------------------------------------
++
++export interface FulfillmentSettings {
++  dispatch_days_min: number;
++  dispatch_days_max: number;
++  delivery_metro_min: number;
++  delivery_metro_max: number;
++  delivery_other_min: number;
++  delivery_other_max: number;
++  delivery_remote_min: number;
++  delivery_remote_max: number;
++  return_window_days: number;
++  cancellation_window_hours: number;
++}
++
++export const DEFAULT_FULFILLMENT_SETTINGS: FulfillmentSettings = {
++  dispatch_days_min: 2,
++  dispatch_days_max: 3,
++  delivery_metro_min: 3,
++  delivery_metro_max: 5,
++  delivery_other_min: 5,
++  delivery_other_max: 8,
++  delivery_remote_min: 10,
++  delivery_remote_max: 12,
++  return_window_days: 7,
++  cancellation_window_hours: 12,
++};
++
++export async function fetchFulfillmentSettings(): Promise<FulfillmentSettings> {
++  const { data, error } = await supabase
++    .from('settings')
++    .select('value')
++    .eq('key', 'fulfillment_settings')
++    .maybeSingle();
++  if (error || !data) return DEFAULT_FULFILLMENT_SETTINGS;
++  return { ...DEFAULT_FULFILLMENT_SETTINGS, ...(data.value as Partial<FulfillmentSettings>) };
++}
++
++export async function saveFulfillmentSettings(settings: FulfillmentSettings) {
++  const { error } = await supabase
++    .from('settings')
++    .upsert({ key: 'fulfillment_settings', value: settings }, { onConflict: 'key' });
++  if (error) throw error;
++}
++
++function dayRange(min: number, max: number): string {
++  return min === max ? `${min}` : `${min}-${max}`;
++}
++
++/** e.g. "2-3 business days" */
++export function dispatchWindowText(f: FulfillmentSettings): string {
++  return `${dayRange(f.dispatch_days_min, f.dispatch_days_max)} business days`;
++}
++
++/** e.g. "3-5 business days after dispatch" */
++export function metroDeliveryText(f: FulfillmentSettings): string {
++  return `${dayRange(f.delivery_metro_min, f.delivery_metro_max)} business days after dispatch`;
++}
++
++/** e.g. "5-8 business days after dispatch" */
++export function otherDeliveryText(f: FulfillmentSettings): string {
++  return `${dayRange(f.delivery_other_min, f.delivery_other_max)} business days after dispatch`;
++}
++
++/** e.g. "up to 10-12 business days" */
++export function remoteDeliveryText(f: FulfillmentSettings): string {
++  return `up to ${dayRange(f.delivery_remote_min, f.delivery_remote_max)} business days`;
++}
++
++/** e.g. "7-day" — for badges like "7-day Returns" */
++export function returnWindowBadgeText(f: FulfillmentSettings): string {
++  return `${f.return_window_days}-day`;
++}
++
++/** e.g. "7 days" — for sentences like "returns within 7 days" */
++export function returnWindowText(f: FulfillmentSettings): string {
++  return `${f.return_window_days} days`;
++}
++
++/** e.g. "12 hours" */
++export function cancellationWindowText(f: FulfillmentSettings): string {
++  return `${f.cancellation_window_hours} hours`;
++}
++
++/** Short one-line summary used on the product page's Shipping & Returns tab. */
++export function shippingReturnsSummary(f: FulfillmentSettings, freeShippingThreshold?: number): string {
++  const freeShip = freeShippingThreshold
++    ? `Free shipping on all orders above Rs ${freeShippingThreshold.toLocaleString('en-IN')}. `
++    : '';
++  return `${freeShip}Dispatched within ${dispatchWindowText(f)}. ${returnWindowBadgeText(f)} easy returns on unworn items with original packaging.`;
++}
++
++// Tokens an admin can drop anywhere inside a Legal Page's text so that
++// page always reflects the current numbers from Admin > Marketing >
++// Shipping & Returns Timing, instead of typing numbers in as plain text
++// that silently go stale the next time those settings change.
++export function applyFulfillmentTokens(text: string, f: FulfillmentSettings): string {
++  if (!text) return text;
++  return text
++    .replace(/\{\{\s*dispatch_days\s*\}\}/g, dayRange(f.dispatch_days_min, f.dispatch_days_max))
++    .replace(/\{\{\s*metro_days\s*\}\}/g, dayRange(f.delivery_metro_min, f.delivery_metro_max))
++    .replace(/\{\{\s*other_days\s*\}\}/g, dayRange(f.delivery_other_min, f.delivery_other_max))
++    .replace(/\{\{\s*remote_days\s*\}\}/g, dayRange(f.delivery_remote_min, f.delivery_remote_max))
++    .replace(/\{\{\s*return_days\s*\}\}/g, String(f.return_window_days))
++    .replace(/\{\{\s*cancellation_hours\s*\}\}/g, String(f.cancellation_window_hours));
++}
++
++// Ready-to-paste templates — the admin panel's "Insert template" button on
++// the Shipping Policy / Refund Policy fields drops this text in, already
++// wired up with the tokens above, so future timing changes flow through
++// without anyone touching this text again.
++export const SHIPPING_POLICY_TEMPLATE = `Order Processing
++Orders are processed and dispatched within {{dispatch_days}} business days of order confirmation, excluding Sundays and public holidays. During sale periods, processing may take slightly longer.
++
++Delivery Timelines
++Metro cities: {{metro_days}} business days after dispatch
++Other cities/towns: {{other_days}} business days after dispatch
++Remote/rural areas: may take up to {{remote_days}} business days
++
++These are estimated timelines and may vary depending on courier partner delays, weather conditions, or other unforeseen circumstances.
++
++Shipping Charges
++Free shipping is available on eligible orders as shown at checkout. A flat shipping charge applies below that threshold.
++
++Order Tracking
++Once your order is dispatched, you will receive a tracking link via email/WhatsApp/SMS to track your shipment in real time.
++
++Delivery Attempts
++Our courier partners typically make up to 2-3 delivery attempts. If delivery is unsuccessful, the order may be returned to us, and you will be contacted to arrange re-delivery (additional shipping charges may apply).
++
++Damaged or Incorrect Items
++If you receive a damaged, defective, or incorrect item, please contact us within 48 hours of delivery with photos/video of the product and packaging, and we will arrange a replacement or refund as per our Refund & Cancellation Policy.
++
++International Shipping
++We currently ship only within India and do not offer international shipping at this time.`;
++
++export const REFUND_POLICY_TEMPLATE = `Order Cancellation
++You may cancel your order within {{cancellation_hours}} hours of placing it, provided it has not already been shipped. To cancel, contact us immediately with your order number.
++
++Returns and Exchanges
++We accept returns/exchanges within {{return_days}} days of delivery, provided the item is:
++
++Unworn, unwashed, and unused
++In its original packaging with all tags intact
++Not a sale/clearance item (unless defective)
++
++Certain items such as blouses that have been stitched or altered as per customer requirements are not eligible for return.
++
++How to Initiate a Return
++Contact us with your order number and reason for return. Once approved, we will arrange a reverse pickup (where serviceable) or share the return address with you.
++
++Refunds
++Once we receive and inspect the returned item, refunds will be processed within 5-7 business days to your original payment method. For Cash on Delivery orders, refunds will be issued via bank transfer or store credit, as per your preference.
++
++Damaged or Defective Items
++If you receive a damaged, defective, or wrong item, please reach out within 48 hours of delivery with clear photos/video, and we will offer a free replacement or full refund, whichever you prefer.`;
++
+ // ---------------------------------------------------------------------
+ // Legal pages (Privacy Policy, Terms, Shipping Policy, Refund Policy)
+ // Stored as one settings row (key = 'legal_pages') so the admin can edit
+@@ -27,10 +197,8 @@ const DEFAULT_LEGAL_PAGES: LegalPages = {
+     'This Privacy Policy explains how we collect, use and protect your personal information when you shop with us. Add your policy content here from the Admin > Marketing tab.',
+   'terms-conditions':
+     'These Terms & Conditions govern your use of this website and any purchases made through it. Add your policy content here from the Admin > Marketing tab.',
+-  'shipping-policy':
+-    'We dispatch orders within 2-3 business days. Delivery timelines vary by location. Add your policy content here from the Admin > Marketing tab.',
+-  'refund-policy':
+-    'We accept returns and exchanges within 7 days of delivery on unworn items with original packaging. Add your policy content here from the Admin > Marketing tab.',
++  'shipping-policy': SHIPPING_POLICY_TEMPLATE,
++  'refund-policy': REFUND_POLICY_TEMPLATE,
+ };
+ 
+ export async function fetchLegalPages(): Promise<LegalPages> {
+@@ -50,6 +218,22 @@ export async function saveLegalPages(pages: LegalPages) {
+   if (error) throw error;
+ }
+ 
++// Same as fetchLegalPages(), but with {{tokens}} already replaced by the
++// live Fulfillment Settings numbers. Use this for anything that DISPLAYS
++// legal-page text to a shopper (the public /legal/[slug] pages, the live
++// chat widget, the AI chat assistant). Do NOT use this for the admin
++// editor — it needs the raw, unresolved text so saving it back doesn't
++// bake today's numbers in and destroy the tokens.
++export async function fetchLegalPagesResolved(): Promise<LegalPages> {
++  const [pages, fulfillment] = await Promise.all([fetchLegalPages(), fetchFulfillmentSettings()]);
++  return {
++    'privacy-policy': applyFulfillmentTokens(pages['privacy-policy'], fulfillment),
++    'terms-conditions': applyFulfillmentTokens(pages['terms-conditions'], fulfillment),
++    'shipping-policy': applyFulfillmentTokens(pages['shipping-policy'], fulfillment),
++    'refund-policy': applyFulfillmentTokens(pages['refund-policy'], fulfillment),
++  };
++}
++
+ // ---------------------------------------------------------------------
+ // Marketing settings: WhatsApp chat widget + Google Merchant feed toggle
+ // ---------------------------------------------------------------------

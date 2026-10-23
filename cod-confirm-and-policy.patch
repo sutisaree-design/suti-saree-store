@@ -1,0 +1,872 @@
+diff --git a/app/api/admin/orders/[id]/cod-confirmation/route.ts b/app/api/admin/orders/[id]/cod-confirmation/route.ts
+new file mode 100644
+index 0000000..2e1bae1
+--- /dev/null
++++ b/app/api/admin/orders/[id]/cod-confirmation/route.ts
+@@ -0,0 +1,37 @@
++import { NextResponse } from 'next/server';
++import { cookies } from 'next/headers';
++import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
++import { codConfirmUrl, confirmCodOrderById, getOrCreateCodConfirmToken } from '@/lib/cod-confirmation';
++
++// Admin-only helpers for the COD confirmation flow.
++//   GET  -> { url }  the customer's secret one-tap confirm link (created if needed)
++//   POST -> { action: 'mark_confirmed' }  admin confirmed it by phone/WhatsApp
++async function guard() {
++  const cookie = cookies().get(ADMIN_SESSION_COOKIE)?.value ?? null;
++  const verified = await verifyAdminToken(cookie);
++  return verified.valid;
++}
++
++export async function GET(req: Request, { params }: { params: { id: string } }) {
++  if (!(await guard())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const token = await getOrCreateCodConfirmToken(params.id);
++  if (!token) {
++    return NextResponse.json(
++      { error: 'Could not create the confirmation link (is this a COD order, and has the SQL migration been run?)' },
++      { status: 409 }
++    );
++  }
++  const base = (process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin).replace(/\/$/, '');
++  return NextResponse.json({ url: codConfirmUrl(token, base) });
++}
++
++export async function POST(req: Request, { params }: { params: { id: string } }) {
++  if (!(await guard())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = await req.json().catch(() => ({}));
++  if (body?.action !== 'mark_confirmed') {
++    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
++  }
++  const ok = await confirmCodOrderById(params.id, 'admin');
++  if (!ok) return NextResponse.json({ error: 'Order is not a pending, unconfirmed COD order' }, { status: 409 });
++  return NextResponse.json({ success: true });
++}
+diff --git a/app/api/cod-confirm/route.ts b/app/api/cod-confirm/route.ts
+new file mode 100644
+index 0000000..8941c0b
+--- /dev/null
++++ b/app/api/cod-confirm/route.ts
+@@ -0,0 +1,21 @@
++import { NextResponse } from 'next/server';
++import { confirmCodOrderByToken, lookupCodConfirmToken } from '@/lib/cod-confirmation';
++
++// Public (token = the credential). GET only READS -- WhatsApp / email link
++// scanners prefetch links, so a GET must never confirm anything. The actual
++// confirmation is a POST triggered by the customer pressing the button on
++// /confirm-order/[token].
++const noStore = { 'Cache-Control': 'no-store' };
++
++export async function GET(req: Request) {
++  const token = new URL(req.url).searchParams.get('token') || '';
++  const result = await lookupCodConfirmToken(token);
++  return NextResponse.json(result, { headers: noStore });
++}
++
++export async function POST(req: Request) {
++  const body = await req.json().catch(() => ({}));
++  const token = typeof body?.token === 'string' ? body.token : '';
++  const result = await confirmCodOrderByToken(token, 'link');
++  return NextResponse.json(result, { headers: noStore });
++}
+diff --git a/app/api/whatsapp/webhook/route.ts b/app/api/whatsapp/webhook/route.ts
+new file mode 100644
+index 0000000..3244476
+--- /dev/null
++++ b/app/api/whatsapp/webhook/route.ts
+@@ -0,0 +1,90 @@
++import { NextResponse } from 'next/server';
++import { createHmac, timingSafeEqual } from 'crypto';
++import { getSupabaseAdmin } from '@/lib/supabase-admin';
++import { confirmCodOrderById } from '@/lib/cod-confirmation';
++
++// ---------------------------------------------------------------------
++// OPTIONAL -- only works if you use the official WhatsApp Business
++// Platform (Meta Cloud API) or a provider that forwards Meta webhooks.
++// Messages opened through wa.me links are sent from a normal WhatsApp
++// account and CAN'T be read by the website, so without the Cloud API the
++// admin uses the "Mark confirmed" button instead.
++//
++// Env vars (all required for this route to do anything):
++//   WHATSAPP_VERIFY_TOKEN  any secret string you also paste in Meta's webhook setup
++//   WHATSAPP_APP_SECRET    Meta app secret (used to verify X-Hub-Signature-256)
++//
++// Safety rules: unsigned / badly-signed requests are rejected; a reply only
++// confirms an order when it matches EXACTLY ONE pending, unconfirmed COD
++// order for that phone number placed in the last 7 days.
++// ---------------------------------------------------------------------
++
++const YES = new Set(['yes', 'y', 'confirm', 'confirmed', 'ok', 'okay', 'haan', 'han', 'ha', 'haa', 'yes confirm', '1', '👍', '✅']);
++
++export async function GET(req: Request) {
++  const sp = new URL(req.url).searchParams;
++  const expected = process.env.WHATSAPP_VERIFY_TOKEN;
++  if (expected && sp.get('hub.mode') === 'subscribe' && sp.get('hub.verify_token') === expected) {
++    return new Response(sp.get('hub.challenge') || '', { status: 200 });
++  }
++  return new Response('Forbidden', { status: 403 });
++}
++
++function validSignature(raw: string, header: string | null): boolean {
++  const secret = process.env.WHATSAPP_APP_SECRET;
++  if (!secret || !header?.startsWith('sha256=')) return false;
++  const expected = createHmac('sha256', secret).update(raw).digest('hex');
++  const got = header.slice('sha256='.length);
++  if (got.length !== expected.length) return false;
++  return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
++}
++
++export async function POST(req: Request) {
++  const raw = await req.text();
++  if (!validSignature(raw, req.headers.get('x-hub-signature-256'))) {
++    return new Response('Invalid signature', { status: 401 });
++  }
++
++  try {
++    const payload = JSON.parse(raw);
++    const messages: any[] = [];
++    for (const entry of payload?.entry ?? []) {
++      for (const change of entry?.changes ?? []) {
++        for (const m of change?.value?.messages ?? []) messages.push(m);
++      }
++    }
++
++    const supabase = getSupabaseAdmin();
++    for (const m of messages) {
++      const text = String(
++        m?.text?.body ?? m?.button?.text ?? m?.interactive?.button_reply?.title ?? m?.interactive?.button_reply?.id ?? ''
++      )
++        .trim()
++        .toLowerCase();
++      if (!YES.has(text)) continue;
++
++      const last10 = String(m?.from ?? '').replace(/\D/g, '').slice(-10);
++      if (last10.length !== 10) continue;
++
++      const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
++      const { data: candidates } = await supabase
++        .from('orders')
++        .select('id')
++        .eq('payment_method', 'cod')
++        .eq('status', 'pending')
++        .is('cod_confirmed_at', null)
++        .ilike('customer_phone', `%${last10}`)
++        .gte('created_at', since);
++
++      if (candidates && candidates.length === 1) {
++        await confirmCodOrderById(candidates[0].id, 'whatsapp_reply');
++      } else {
++        console.log('[whatsapp-webhook] reply not auto-matched, candidates:', candidates?.length ?? 0);
++      }
++    }
++  } catch (err) {
++    console.error('[whatsapp-webhook] failed:', err);
++  }
++  // Always 200 so Meta doesn't retry-storm us.
++  return NextResponse.json({ received: true });
++}
+diff --git a/app/confirm-order/[token]/layout.tsx b/app/confirm-order/[token]/layout.tsx
+new file mode 100644
+index 0000000..3f17d74
+--- /dev/null
++++ b/app/confirm-order/[token]/layout.tsx
+@@ -0,0 +1,10 @@
++import type { Metadata } from 'next';
++
++export const metadata: Metadata = {
++  title: 'Confirm your order',
++  robots: { index: false, follow: false },
++};
++
++export default function ConfirmOrderLayout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/confirm-order/[token]/page.tsx b/app/confirm-order/[token]/page.tsx
+new file mode 100644
+index 0000000..d34cc22
+--- /dev/null
++++ b/app/confirm-order/[token]/page.tsx
+@@ -0,0 +1,165 @@
++'use client';
++
++import { useEffect, useState } from 'react';
++import Link from 'next/link';
++import { BadgeCheck, CheckCircle2, Loader2, Package, ShieldCheck, Wallet, AlertCircle } from 'lucide-react';
++import { Button } from '@/components/ui/button';
++import { formatINR } from '@/lib/format';
++
++type Summary = { id: string; shortId: string; firstName: string; total: number; itemNames: string[]; itemCount: number };
++type Lookup =
++  | { state: 'invalid' | 'expired' | 'cancelled' | 'not_cod' }
++  | { state: 'ok' | 'confirmed' | 'processing'; summary: Summary };
++
++const MESSAGES: Record<string, { title: string; body: string }> = {
++  invalid: { title: 'This link is not valid', body: 'The link may be incomplete. Please open it again from your email or WhatsApp message.' },
++  expired: { title: 'This link has expired', body: 'Please contact us and we will confirm your order for you.' },
++  cancelled: { title: 'This order was cancelled', body: 'There is nothing to confirm for this order.' },
++  not_cod: { title: 'No confirmation needed', body: 'This order is no longer Cash on Delivery. Please check your email for the latest update.' },
++};
++
++export default function ConfirmOrderPage({ params }: { params: { token: string } }) {
++  const [data, setData] = useState<Lookup | null>(null);
++  const [busy, setBusy] = useState(false);
++  const [failed, setFailed] = useState(false);
++
++  useEffect(() => {
++    let cancelled = false;
++    fetch(`/api/cod-confirm?token=${encodeURIComponent(params.token)}`, { cache: 'no-store' })
++      .then((r) => r.json())
++      .then((d) => !cancelled && setData(d))
++      .catch(() => !cancelled && setData({ state: 'invalid' }));
++    return () => {
++      cancelled = true;
++    };
++  }, [params.token]);
++
++  const confirm = async () => {
++    setBusy(true);
++    setFailed(false);
++    try {
++      const res = await fetch('/api/cod-confirm', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ token: params.token }),
++      });
++      const d: Lookup = await res.json();
++      if (d.state === 'confirmed') setData(d);
++      else setFailed(true);
++    } catch {
++      setFailed(true);
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const summary = data && 'summary' in data ? data.summary : null;
++  const confirmed = data?.state === 'confirmed';
++
++  return (
++    <main className="mx-auto flex min-h-[70vh] max-w-md items-center px-4 py-10">
++      <div className="w-full overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_20px_50px_-28px_hsl(var(--primary)/0.5)]">
++        <div className="h-1.5 bg-gradient-to-r from-primary via-secondary to-primary" />
++        <div className="p-6">
++          {!data && (
++            <div className="flex flex-col items-center gap-3 py-10 text-muted-foreground">
++              <Loader2 className="h-6 w-6 animate-spin" />
++              <p className="text-sm">Checking your order…</p>
++            </div>
++          )}
++
++          {data && !summary && (
++            <div className="flex flex-col items-center gap-3 py-8 text-center">
++              <AlertCircle className="h-9 w-9 text-secondary" />
++              <h1 className="font-serif text-xl font-bold text-primary">{MESSAGES[data.state]?.title}</h1>
++              <p className="text-sm text-muted-foreground">{MESSAGES[data.state]?.body}</p>
++              <Link href="/contact" className="mt-2 text-sm font-medium text-primary underline underline-offset-4">
++                Contact us
++              </Link>
++            </div>
++          )}
++
++          {summary && (
++            <>
++              <div className="flex flex-col items-center text-center">
++                <span
++                  className={`flex h-14 w-14 items-center justify-center rounded-full ${
++                    confirmed ? 'bg-green-100 text-green-700' : 'bg-primary/10 text-primary'
++                  }`}
++                >
++                  {confirmed ? <CheckCircle2 className="h-8 w-8" /> : <Wallet className="h-7 w-7" />}
++                </span>
++                <h1 className="mt-3 font-serif text-2xl font-bold text-primary">
++                  {confirmed
++                    ? 'Order confirmed, thank you!'
++                    : `Confirm your order${summary.firstName ? `, ${summary.firstName}` : ''}`}
++                </h1>
++                <p className="mt-1 text-sm text-muted-foreground">
++                  {confirmed
++                    ? `Order #${summary.shortId} is confirmed. We will keep you updated on email and WhatsApp.`
++                    : data?.state === 'processing'
++                    ? `Order #${summary.shortId} is already being processed. Nothing more is needed from you.`
++                    : `One tap to confirm your Cash on Delivery order #${summary.shortId}.`}
++                </p>
++              </div>
++
++              <div className="mt-5 rounded-xl border border-border/60 bg-muted/30 p-4">
++                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
++                  <Package className="h-4 w-4 text-secondary" />
++                  {summary.itemCount} {summary.itemCount === 1 ? 'item' : 'items'}
++                </div>
++                <ul className="mt-2 space-y-1 text-sm">
++                  {summary.itemNames.map((n, i) => (
++                    <li key={i} className="line-clamp-1">{n}</li>
++                  ))}
++                  {summary.itemCount > summary.itemNames.length && (
++                    <li className="text-xs text-muted-foreground">+ {summary.itemCount - summary.itemNames.length} more</li>
++                  )}
++                </ul>
++                <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3">
++                  <span className="text-sm text-muted-foreground">Pay on delivery</span>
++                  <span className="font-serif text-lg font-bold text-primary">{formatINR(summary.total)}</span>
++                </div>
++              </div>
++
++              {data?.state === 'ok' && (
++                <>
++                  <Button onClick={confirm} disabled={busy} size="lg" className="mt-5 w-full bg-primary">
++                    {busy ? (
++                      <>
++                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming…
++                      </>
++                    ) : (
++                      <>
++                        <BadgeCheck className="mr-2 h-4 w-4" /> Yes, confirm my order
++                      </>
++                    )}
++                  </Button>
++                  {failed && (
++                    <p className="mt-2 text-center text-xs text-red-600">Something went wrong. Please try again.</p>
++                  )}
++                  <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
++                    <ShieldCheck className="h-3.5 w-3.5 text-secondary" /> No payment needed now. You pay when it arrives.
++                  </p>
++                </>
++              )}
++
++              {(confirmed || data?.state === 'processing') && (
++                <Button asChild variant="outline" size="lg" className="mt-5 w-full">
++                  <Link href={`/track/${summary.id}`}>Track my order</Link>
++                </Button>
++              )}
++
++              <p className="mt-4 text-center text-xs text-muted-foreground">
++                Want to change or cancel?{' '}
++                <Link href="/contact" className="font-medium text-primary underline underline-offset-4">
++                  Contact us
++                </Link>
++              </p>
++            </>
++          )}
++        </div>
++      </div>
++    </main>
++  );
++}
+diff --git a/components/admin/cod-confirmation-controls.tsx b/components/admin/cod-confirmation-controls.tsx
+new file mode 100644
+index 0000000..7142ad8
+--- /dev/null
++++ b/components/admin/cod-confirmation-controls.tsx
+@@ -0,0 +1,172 @@
++'use client';
++
++import { useState } from 'react';
++import { BadgeCheck, Clock, Copy, Loader2, MessageCircle } from 'lucide-react';
++import { toast } from 'sonner';
++
++const VIA_LABEL: Record<string, string> = {
++  link: 'link',
++  whatsapp_reply: 'WhatsApp reply',
++  admin: 'admin',
++};
++
++interface Props {
++  orderId: string;
++  /** Digits with country code (e.g. 919876543210) or null when the phone is invalid. */
++  whatsappDigits: string | null;
++  firstName: string;
++  shortId: string;
++  total: number;
++  storeName: string;
++  confirmedAt?: string | null;
++  confirmedVia?: string | null;
++  onChanged: () => void;
++}
++
++/**
++ * Admin > Orders: COD confirmation status + actions.
++ * Purely informational for the admin -- it never blocks shipping by itself.
++ */
++export default function CodConfirmationControls({
++  orderId,
++  whatsappDigits,
++  firstName,
++  shortId,
++  total,
++  storeName,
++  confirmedAt,
++  confirmedVia,
++  onChanged,
++}: Props) {
++  const [busy, setBusy] = useState<'wa' | 'copy' | 'mark' | null>(null);
++
++  const fetchLink = async (): Promise<string | null> => {
++    const res = await fetch(`/api/admin/orders/${orderId}/cod-confirmation`);
++    const body = await res.json().catch(() => ({}));
++    if (!res.ok || !body?.url) {
++      toast.error(body?.error || 'Could not create the confirmation link');
++      return null;
++    }
++    return body.url as string;
++  };
++
++  const sendWhatsApp = async () => {
++    if (!whatsappDigits) return;
++    setBusy('wa');
++    // Open the tab synchronously (inside the click) so popup blockers allow it.
++    const win = window.open('', '_blank');
++    try {
++      const url = await fetchLink();
++      if (!url) {
++        win?.close();
++        return;
++      }
++      const inr = `₹${Math.round(total).toLocaleString('en-IN')}`;
++      const text = [
++        `Dear${firstName ? ` ${firstName}` : ''},`,
++        '',
++        `Thank you for ordering from *${storeName}*. We have received your Cash on Delivery order *#${shortId}* of *${inr}*.`,
++        '',
++        `Please confirm it with one tap so we can get it ready for dispatch:`,
++        url,
++        '',
++        `You can also simply reply *YES* to this message.`,
++        '',
++        `Warm regards,`,
++        `*Team ${storeName}*`,
++      ].join('\n');
++      const wa = `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
++      if (win) win.location.href = wa;
++      else window.location.href = wa;
++    } finally {
++      setBusy(null);
++    }
++  };
++
++  const copyLink = async () => {
++    setBusy('copy');
++    try {
++      const url = await fetchLink();
++      if (url) {
++        await navigator.clipboard.writeText(url);
++        toast.success('Confirmation link copied');
++      }
++    } finally {
++      setBusy(null);
++    }
++  };
++
++  const markConfirmed = async () => {
++    setBusy('mark');
++    try {
++      const res = await fetch(`/api/admin/orders/${orderId}/cod-confirmation`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ action: 'mark_confirmed' }),
++      });
++      const body = await res.json().catch(() => ({}));
++      if (!res.ok) {
++        toast.error(body?.error || 'Could not mark as confirmed');
++        return;
++      }
++      toast.success('Marked as confirmed');
++      onChanged();
++    } finally {
++      setBusy(null);
++    }
++  };
++
++  if (confirmedAt) {
++    return (
++      <span
++        className="inline-flex w-fit items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800"
++        title={new Date(confirmedAt).toLocaleString('en-IN')}
++      >
++        <BadgeCheck className="h-3 w-3" />
++        COD confirmed{confirmedVia ? ` · ${VIA_LABEL[confirmedVia] || confirmedVia}` : ''}
++      </span>
++    );
++  }
++
++  const btn =
++    'inline-flex w-fit items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium leading-tight disabled:opacity-60';
++
++  return (
++    <div className="flex flex-col gap-1.5">
++      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
++        <Clock className="h-3 w-3" />
++        COD awaiting confirmation
++      </span>
++      <div className="flex flex-wrap gap-1.5">
++        {whatsappDigits ? (
++          <button
++            type="button"
++            onClick={sendWhatsApp}
++            disabled={busy !== null}
++            className={`${btn} border-transparent bg-[#25D366] text-white hover:bg-[#1ebe57]`}
++            title="Opens WhatsApp with a message containing the customer's one-tap confirm link"
++          >
++            {busy === 'wa' ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
++            Ask to confirm on WhatsApp
++          </button>
++        ) : (
++          <span className="text-[10px] text-red-600">No valid phone number for WhatsApp</span>
++        )}
++        <button type="button" onClick={copyLink} disabled={busy !== null} className={`${btn} border-border bg-card hover:bg-muted`}>
++          {busy === 'copy' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy className="h-3 w-3" />}
++          Copy link
++        </button>
++        <button
++          type="button"
++          onClick={markConfirmed}
++          disabled={busy !== null}
++          className={`${btn} border-border bg-card hover:bg-muted`}
++          title="Use when the customer confirmed by phone or by replying on WhatsApp"
++        >
++          {busy === 'mark' ? <Loader2 className="h-3 w-3 animate-spin" /> : <BadgeCheck className="h-3 w-3" />}
++          Mark confirmed
++        </button>
++      </div>
++    </div>
++  );
++}
+diff --git a/components/admin/orders-panel.tsx b/components/admin/orders-panel.tsx
+index 167d6ab..4eed01f 100644
+--- a/components/admin/orders-panel.tsx
++++ b/components/admin/orders-panel.tsx
+@@ -44,12 +44,18 @@ import CreateShipmentModal, {
+   type CreateShipmentPayload,
+ } from '@/components/admin/create-shipment-modal';
+ 
++import CodConfirmationControls from '@/components/admin/cod-confirmation-controls';
++
+ type Order = {
+   id: string;
+   items: any[];
+   total_amount: number;
+   status: string;
+   payment_method?: string;
++  // COD one-tap confirmation (see lib/cod-confirmation.ts). Informational
++  // only -- never changes order status.
++  cod_confirmed_at?: string | null;
++  cod_confirmed_via?: string | null;
+   // Set once at order-placement time by a DB trigger and never touched
+   // again -- survives "Request Online Payment" flipping payment_method
+   // 'cod' -> 'online', so the admin can still tell this order was
+@@ -763,6 +769,7 @@ export default function OrdersPanel() {
+                   requestingOnlinePayment={requestingOnlinePaymentFor === o.id}
+                   onUpdateDetails={updateOrderDetails}
+                   savingDetails={savingDetailsFor === o.id}
++                  onReload={load}
+                 />
+               ))
+             )}
+@@ -1520,6 +1527,7 @@ function OrderRow({
+   requestingOnlinePayment,
+   onUpdateDetails,
+   savingDetails,
++  onReload,
+ }: {
+   order: Order;
+   selected: boolean;
+@@ -1537,6 +1545,7 @@ function OrderRow({
+     details: { customer_email?: string; customer_phone?: string; shipping_address?: Record<string, any> }
+   ) => Promise<boolean>;
+   savingDetails: boolean;
++  onReload: () => void;
+ }) {
+   const [open, setOpen] = useState(false);
+   const [copied, setCopied] = useState(false);
+@@ -1849,15 +1858,35 @@ function OrderRow({
+               never open the confirmation email). Disappears once the order
+               moves on from 'paid' (shipped, delivered, ...). */}
+           {order.status === 'paid' && (
+-            <div className="mt-1.5">
++            <div className="mt-1.5 flex flex-col gap-1.5">
++              <span className="inline-flex w-fit items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
++                Prepaid · ship first
++              </span>
+               <WhatsAppPaidConfirmationButton order={order} />
+             </div>
+           )}
+           {/* Every other status gets its own polite WhatsApp message too.
+               (pending+converted-from-COD and paid are handled just above.) */}
+           {order.status === 'pending' && isCod && (
+-            <div className="mt-1.5">
+-              <WhatsAppStatusButton order={order} kind={justRevertedToCod ? 'cod_reverted' : 'cod_confirmed'} />
++            <div className="mt-1.5 flex flex-col gap-1.5">
++              {justRevertedToCod ? (
++                <WhatsAppStatusButton order={order} kind="cod_reverted" />
++              ) : (
++                <>
++                  <CodConfirmationControls
++                    orderId={order.id}
++                    whatsappDigits={getWhatsAppDigits(order)}
++                    firstName={(order.customer_name || '').trim().split(/\s+/)[0]}
++                    shortId={order.id.slice(0, 8).toUpperCase()}
++                    total={Number(order.total_amount || 0)}
++                    storeName={STORE_NAME}
++                    confirmedAt={order.cod_confirmed_at}
++                    confirmedVia={order.cod_confirmed_via}
++                    onChanged={onReload}
++                  />
++                  {order.cod_confirmed_at && <WhatsAppStatusButton order={order} kind="cod_confirmed" />}
++                </>
++              )}
+             </div>
+           )}
+           {order.status === 'pending' && !isCod && !wasConvertedFromCod && isAwaitingOnlinePayment && (
+diff --git a/components/checkout/payment-method-selector.tsx b/components/checkout/payment-method-selector.tsx
+index 4322dad..896223d 100644
+--- a/components/checkout/payment-method-selector.tsx
++++ b/components/checkout/payment-method-selector.tsx
+@@ -30,7 +30,7 @@ export const PAYMENT_COPY = {
+   codTitle: 'Cash on Delivery',
+   codSub: 'Pay in cash when your order arrives',
+   codNote:
+-    'COD orders go through a verification step and are dispatched after prepaid orders, so delivery can take a little longer.',
++    'We will send a one-tap confirmation link by email/WhatsApp. COD orders are dispatched after prepaid orders, so delivery can take a little longer.',
+ } as const;
+ 
+ const BENEFIT_ICONS = {
+diff --git a/lib/cod-confirmation.ts b/lib/cod-confirmation.ts
+new file mode 100644
+index 0000000..359324a
+--- /dev/null
++++ b/lib/cod-confirmation.ts
+@@ -0,0 +1,121 @@
++import { randomBytes } from 'crypto';
++import { getSupabaseAdmin } from './supabase-admin';
++
++// ---------------------------------------------------------------------
++// COD one-tap confirmation. Purely additive: it only stamps
++// orders.cod_confirmed_at / cod_confirmed_via. It never changes
++// orders.status, so shipping / Delhivery / invoices / reports are untouched.
++// If the migration (20261022000000_cod_order_confirmation.sql) has not been
++// run yet, every function here fails soft (returns null / 'invalid') and the
++// rest of order placement keeps working exactly as before.
++// ---------------------------------------------------------------------
++
++const TOKEN_TTL_DAYS = 14;
++
++export type CodConfirmVia = 'link' | 'whatsapp_reply' | 'admin';
++
++export function codConfirmUrl(token: string, base?: string): string {
++  const site = (base || process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
++  return `${site}/confirm-order/${token}`;
++}
++
++/** Returns the order's confirm token (creating one for COD orders). null = not applicable / failed. */
++export async function getOrCreateCodConfirmToken(orderId: string): Promise<string | null> {
++  try {
++    const supabase = getSupabaseAdmin();
++    const { data: order, error } = await supabase
++      .from('orders')
++      .select('id, payment_method, cod_confirm_token')
++      .eq('id', orderId)
++      .maybeSingle();
++    if (error || !order) return null;
++    if (order.payment_method !== 'cod') return null;
++    if (order.cod_confirm_token) return order.cod_confirm_token as string;
++
++    const token = randomBytes(24).toString('base64url');
++    const { error: upErr } = await supabase
++      .from('orders')
++      .update({ cod_confirm_token: token, cod_confirm_requested_at: new Date().toISOString() })
++      .eq('id', orderId)
++      .is('cod_confirm_token', null);
++    if (upErr) return null;
++
++    const { data: again } = await supabase.from('orders').select('cod_confirm_token').eq('id', orderId).maybeSingle();
++    return (again?.cod_confirm_token as string) ?? null;
++  } catch {
++    return null;
++  }
++}
++
++export type CodConfirmSummary = {
++  id: string;
++  shortId: string;
++  firstName: string;
++  total: number;
++  itemNames: string[];
++  itemCount: number;
++};
++
++export type CodConfirmLookup =
++  | { state: 'invalid' | 'expired' | 'cancelled' | 'not_cod' }
++  | { state: 'ok' | 'confirmed' | 'processing'; summary: CodConfirmSummary };
++
++export async function lookupCodConfirmToken(token: string): Promise<CodConfirmLookup> {
++  if (!token || token.length < 20 || token.length > 128) return { state: 'invalid' };
++  try {
++    const supabase = getSupabaseAdmin();
++    const { data: order, error } = await supabase
++      .from('orders')
++      .select('id, items, total_amount, status, payment_method, created_at, cod_confirmed_at, customer_name')
++      .eq('cod_confirm_token', token)
++      .maybeSingle();
++    if (error || !order) return { state: 'invalid' };
++
++    const items: any[] = Array.isArray(order.items) ? order.items : [];
++    const summary: CodConfirmSummary = {
++      id: order.id,
++      shortId: String(order.id).slice(0, 8).toUpperCase(),
++      firstName: String(order.customer_name || '').trim().split(/\s+/)[0] || '',
++      total: Number(order.total_amount || 0),
++      itemNames: items.slice(0, 3).map((it) => String(it?.product_name || it?.name || 'Your selection')),
++      itemCount: items.length,
++    };
++
++    if (order.payment_method !== 'cod') return { state: 'not_cod' };
++    if (order.status === 'cancelled' || order.status === 'failed') return { state: 'cancelled' };
++    if (order.cod_confirmed_at) return { state: 'confirmed', summary };
++    if (order.status !== 'pending') return { state: 'processing', summary };
++    const ageDays = (Date.now() - new Date(order.created_at).getTime()) / 86_400_000;
++    if (ageDays > TOKEN_TTL_DAYS) return { state: 'expired' };
++    return { state: 'ok', summary };
++  } catch {
++    return { state: 'invalid' };
++  }
++}
++
++export async function confirmCodOrderByToken(token: string, via: CodConfirmVia): Promise<CodConfirmLookup> {
++  const found = await lookupCodConfirmToken(token);
++  if (found.state !== 'ok') return found;
++  const supabase = getSupabaseAdmin();
++  const { error } = await supabase
++    .from('orders')
++    .update({ cod_confirmed_at: new Date().toISOString(), cod_confirmed_via: via })
++    .eq('id', found.summary.id)
++    .is('cod_confirmed_at', null);
++  if (error) return { state: 'invalid' };
++  return { state: 'confirmed', summary: found.summary };
++}
++
++/** Used by the admin button and the WhatsApp reply webhook (no token needed). */
++export async function confirmCodOrderById(orderId: string, via: CodConfirmVia): Promise<boolean> {
++  const supabase = getSupabaseAdmin();
++  const { data, error } = await supabase
++    .from('orders')
++    .update({ cod_confirmed_at: new Date().toISOString(), cod_confirmed_via: via })
++    .eq('id', orderId)
++    .eq('payment_method', 'cod')
++    .eq('status', 'pending')
++    .is('cod_confirmed_at', null)
++    .select('id');
++  return !error && !!data && data.length > 0;
++}
+diff --git a/lib/email-templates.ts b/lib/email-templates.ts
+index 9703ee5..e85fa34 100644
+--- a/lib/email-templates.ts
++++ b/lib/email-templates.ts
+@@ -183,8 +183,14 @@ export function orderConfirmationEmail(order: {
+   items: any[];
+   total_amount: number;
+   payment_method?: string;
++  // COD only: secret one-tap confirmation link (see lib/cod-confirmation.ts).
++  // When absent the email is exactly the same as before.
++  cod_confirm_url?: string;
+ }) {
+-  const subject = `Order confirmed — #${order.id.slice(0, 8)}`;
++  const codConfirm = order.payment_method === 'cod' && !!order.cod_confirm_url;
++  const subject = codConfirm
++    ? `Please confirm your COD order — #${order.id.slice(0, 8)}`
++    : `Order confirmed — #${order.id.slice(0, 8)}`;
+   // Emails can't run JS or POST to our API directly, so this links back to
+   // the order-confirmation page (works with no login for guest orders --
+   // see app/api/orders/[id]/cancel/route.ts) where the actual Cancel
+@@ -193,12 +199,23 @@ export function orderConfirmationEmail(order: {
+   const trackUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ''}/track/${order.id}`;
+   const html = wrapper(`
+     <h2 style="margin-top:0; color:${BRAND_COLOR};">Thank you for your order, ${order.customer_name || 'there'}!</h2>
+-    <p>We've received your order <strong>#${order.id.slice(0, 8)}</strong> and it's being prepared.</p>
++    <p>We've received your order <strong>#${order.id.slice(0, 8)}</strong>${codConfirm ? '.' : " and it's being prepared."}</p>
+     ${itemsTable(order.items)}
+     <p style="text-align:right; font-size:16px; font-weight:bold;">Total: ${formatINR(order.total_amount)}</p>
+     <p style="font-size:13px; color:#6b5f57;">
+       Payment method: ${order.payment_method === 'cod' ? 'Cash on Delivery' : 'Paid Online'}
+     </p>
++    ${
++      codConfirm
++        ? `<div style="margin:20px 0; padding:16px; border:1px solid #e8d9a8; background:#fbf6e6; border-radius:8px; text-align:center;">
++      <p style="margin:0 0 6px; font-weight:bold; color:${BRAND_COLOR};">One quick step: confirm your Cash on Delivery order</p>
++      <p style="margin:0 0 14px; font-size:13px; color:#6b5f57;">Tap once to confirm. No payment is needed now &mdash; you pay when the order arrives.</p>
++      <a href="${order.cod_confirm_url}" style="background:${BRAND_COLOR}; color:#fff; padding: 12px 28px; text-decoration:none; border-radius: 4px; font-size: 14px; display:inline-block;">
++        Yes, confirm my order
++      </a>
++    </div>`
++        : ''
++    }
+     <p style="text-align:center; margin-top: 20px;">
+       <a href="${trackUrl}" style="background:${BRAND_COLOR}; color:#fff; padding: 12px 28px; text-decoration:none; border-radius: 4px; font-size: 14px; display:inline-block;">
+         Track My Order
+diff --git a/lib/marketing-api.ts b/lib/marketing-api.ts
+index 9e7fc3d..916781f 100644
+--- a/lib/marketing-api.ts
++++ b/lib/marketing-api.ts
+@@ -178,6 +178,13 @@ We ship using trusted logistics partners such as Delhivery and Shiprocket (and o
+ Order Processing
+ Orders are processed and dispatched within {{dispatch_days}} business days of order confirmation, excluding Sundays and public holidays. During sale periods, processing may take slightly longer.
+ 
++Prepaid and Cash on Delivery (COD) Orders
++Prepaid orders (UPI, cards, netbanking) are confirmed instantly on successful payment and are packed and dispatched ahead of Cash on Delivery orders in our processing queue.
++
++COD orders are confirmed when you tap the one-tap confirmation link we send by email/WhatsApp (or when our team confirms with you by phone/WhatsApp). Confirmed COD orders are dispatched after prepaid orders, so they may take slightly longer to reach you. We may hold an unconfirmed COD order until it is confirmed.
++
++Where an online-payment discount applies, it is shown at checkout before you pay. Product prices and delivery charges are otherwise the same for both payment methods, and the delivery timelines below apply from the date of dispatch for both.
++
+ Delivery Timelines
+ Metro cities: {{metro_days}} business days after dispatch
+ Other cities/towns: {{other_days}} business days after dispatch
+diff --git a/lib/order-confirmation.ts b/lib/order-confirmation.ts
+index 78de2bf..ab5a5e5 100644
+--- a/lib/order-confirmation.ts
++++ b/lib/order-confirmation.ts
+@@ -1,6 +1,7 @@
+ import { getSupabaseAdmin } from './supabase-admin';
+ import { sendEmail } from './email';
+ import { orderConfirmationEmail, newOrderAdminNotification } from './email-templates';
++import { codConfirmUrl, getOrCreateCodConfirmToken } from './cod-confirmation';
+ import { DEFAULT_LOYALTY_SETTINGS, type LoyaltySettings } from './loyalty-api';
+ import { DEFAULT_REFERRAL_SETTINGS, type ReferralSettings } from './referrals-api';
+ 
+@@ -31,12 +32,20 @@ export async function runOrderConfirmationSideEffects(orderId: string) {
+   // (e.g. once from the client on the happy path, once more from the
+   // webhook as a safety net) without double-sending.
+   if (order.customer_email && !order.confirmation_email_sent_at) {
++    // COD: add the one-tap confirmation link. Fails soft -- if anything goes
++    // wrong (e.g. migration not run yet) the email is sent exactly as before.
++    let confirmUrl: string | undefined;
++    if (order.payment_method === 'cod') {
++      const token = await getOrCreateCodConfirmToken(order.id);
++      if (token) confirmUrl = codConfirmUrl(token);
++    }
+     const { subject, html } = orderConfirmationEmail({
+       id: order.id,
+       customer_name: order.customer_name,
+       items: Array.isArray(order.items) ? order.items : [],
+       total_amount: order.total_amount,
+       payment_method: order.payment_method,
++      cod_confirm_url: confirmUrl,
+     });
+ 
+     sendEmail({ to: order.customer_email, subject, html })
+diff --git a/supabase/migrations/20261022000000_cod_order_confirmation.sql b/supabase/migrations/20261022000000_cod_order_confirmation.sql
+new file mode 100644
+index 0000000..4e4ca57
+--- /dev/null
++++ b/supabase/migrations/20261022000000_cod_order_confirmation.sql
+@@ -0,0 +1,13 @@
++-- COD one-tap confirmation (additive only -- no existing column or flow changes).
++-- The customer gets a secret link by email / WhatsApp; tapping it on
++-- /confirm-order/[token] stamps cod_confirmed_at. Order status is NOT changed,
++-- so shipping, Delhivery, invoices and reports behave exactly as before.
++ALTER TABLE public.orders
++  ADD COLUMN IF NOT EXISTS cod_confirm_token text,
++  ADD COLUMN IF NOT EXISTS cod_confirm_requested_at timestamptz,
++  ADD COLUMN IF NOT EXISTS cod_confirmed_at timestamptz,
++  ADD COLUMN IF NOT EXISTS cod_confirmed_via text;
++
++CREATE UNIQUE INDEX IF NOT EXISTS orders_cod_confirm_token_key
++  ON public.orders (cod_confirm_token)
++  WHERE cod_confirm_token IS NOT NULL;

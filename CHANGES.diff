@@ -1,0 +1,177 @@
+diff --git a/app/api/admin/notifications/route.ts b/app/api/admin/notifications/route.ts
+index fce475e..a4abb2a 100644
+--- a/app/api/admin/notifications/route.ts
++++ b/app/api/admin/notifications/route.ts
+@@ -19,7 +19,11 @@ export type AdminNotification = {
+     | 'restock'
+     | 'abandoned_cart'
+     | 'vendor_pickup'
+-    | 'vendor_return_pending';
++    | 'vendor_return_pending'
++    | 'review'
++    | 'vendor_application'
++    | 'new_reseller'
++    | 'new_affiliate';
+   title: string;
+   message: string;
+   section: string;
+@@ -36,7 +40,7 @@ export async function GET() {
+   const supabase = getSupabaseAdmin();
+ 
+   try {
+-    const [ordersRes, contactRes, ticketsRes, returnsRes, restockRes, cartsRes, pickupRes, vendorReturnRes] = await Promise.all([
++    const [ordersRes, contactRes, ticketsRes, returnsRes, restockRes, cartsRes, pickupRes, vendorReturnRes, reviewsRes, vendorAppsRes, resellersRes, affiliatesRes] = await Promise.all([
+       supabase
+         .from('orders')
+         .select('id, customer_name, customer_email, total_amount, created_at')
+@@ -94,8 +98,56 @@ export async function GET() {
+         .eq('status', 'pending')
+         .order('created_at', { ascending: false })
+         .limit(30),
++      // New reviews/ratings — auto-published 5s after submission (see
++      // scheduleAutoPublish in lib/reviews-api.ts), so this isn't a
++      // "pending action" queue like the others; it's just the latest
++      // arrivals so an admin notices right away and can Hide one from
++      // the Reviews panel if needed. Newest 10 only, so the bell doesn't
++      // fill up with old reviews once caught up.
++      supabase
++        .from('reviews')
++        .select('id, customer_name, rating, comment, title, created_at, product_id, products(name)')
++        .order('created_at', { ascending: false })
++        .limit(10),
++      // New vendor applications waiting on Approve/Reject (Vendors panel,
++      // "Pending Applications" tab in the screenshot). This IS a real
++      // pending-action queue, like orders/returns/tickets above.
++      supabase
++        .from('vendors')
++        .select('id, business_name, owner_name, created_at')
++        .eq('status', 'pending')
++        .order('created_at', { ascending: false })
++        .limit(20),
++      // Reseller & affiliate signups are both self-serve / auto-approved
++      // (no pending state to gate on — see lib/reseller-api.ts and the
++      // `status: 'approved'` insert in app/api/affiliate/route.ts), so
++      // like reviews these are just "latest arrivals" rather than a
++      // to-do queue. Newest 5 each keeps the bell from filling up once
++      // an admin is caught up.
++      supabase
++        .from('reseller_profiles')
++        .select('id, user_id, business_name, created_at')
++        .order('created_at', { ascending: false })
++        .limit(5),
++      supabase
++        .from('affiliates')
++        .select('id, user_id, code, created_at')
++        .order('created_at', { ascending: false })
++        .limit(5),
+     ]);
+ 
++    // reseller_profiles / affiliates don't carry the person's name --
++    // resolved the same way the admin Resellers/Affiliates panels do,
++    // via `profiles.full_name` keyed by user_id.
++    const nameLookupIds = [
++      ...(resellersRes.data || []).map((r: any) => r.user_id),
++      ...(affiliatesRes.data || []).map((a: any) => a.user_id),
++    ].filter(Boolean);
++    const { data: nameProfiles } = nameLookupIds.length
++      ? await supabase.from('profiles').select('id, full_name').in('id', nameLookupIds)
++      : { data: [] as any[] };
++    const nameByUserId = new Map((nameProfiles || []).map((p: any) => [p.id, p.full_name]));
++
+     const notifications: AdminNotification[] = [];
+ 
+     (ordersRes.data || []).forEach((o: any) => {
+@@ -200,6 +252,57 @@ export async function GET() {
+       });
+     });
+ 
++    (reviewsRes.data || []).forEach((r: any) => {
++      const stars = '★'.repeat(Math.max(0, Math.min(5, r.rating || 0)));
++      const productName = r.products?.name || 'a product';
++      const hasWritten = Boolean((r.title && r.title.trim()) || (r.comment && r.comment.trim()));
++      notifications.push({
++        id: `review-${r.id}`,
++        type: 'review',
++        title: hasWritten ? 'New review received' : 'New rating received',
++        message: `${r.customer_name || 'A customer'} rated "${productName}" ${stars} (${r.rating}/5)${
++          hasWritten ? ` — "${(r.title || r.comment || '').slice(0, 60)}"` : ''
++        }`,
++        section: 'reviews',
++        created_at: r.created_at,
++      });
++    });
++
++    (vendorAppsRes.data || []).forEach((v: any) => {
++      notifications.push({
++        id: `vendor-app-${v.id}`,
++        type: 'vendor_application',
++        title: 'New vendor application',
++        message: `${v.business_name || 'A vendor'}${v.owner_name ? ` (${v.owner_name})` : ''} applied — waiting on Approve/Reject`,
++        section: 'vendors',
++        created_at: v.created_at,
++      });
++    });
++
++    (resellersRes.data || []).forEach((r: any) => {
++      const name = nameByUserId.get(r.user_id) || r.business_name || 'A customer';
++      notifications.push({
++        id: `reseller-${r.id}`,
++        type: 'new_reseller',
++        title: 'New reseller joined',
++        message: `${name} joined the Reseller Program`,
++        section: 'resellers',
++        created_at: r.created_at,
++      });
++    });
++
++    (affiliatesRes.data || []).forEach((a: any) => {
++      const name = nameByUserId.get(a.user_id) || 'A customer';
++      notifications.push({
++        id: `affiliate-${a.id}`,
++        type: 'new_affiliate',
++        title: 'New affiliate joined',
++        message: `${name} joined the Affiliate Program (code ${a.code})`,
++        section: 'affiliates',
++        created_at: a.created_at,
++      });
++    });
++
+     notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+ 
+     return NextResponse.json({ notifications: notifications.slice(0, 50) });
+diff --git a/components/admin/notification-bell.tsx b/components/admin/notification-bell.tsx
+index 6dc0a86..565c33a 100644
+--- a/components/admin/notification-bell.tsx
++++ b/components/admin/notification-bell.tsx
+@@ -13,6 +13,9 @@ import {
+   Loader2,
+   Truck,
+   Landmark,
++  Star,
++  Store,
++  Users2,
+ } from 'lucide-react';
+ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+ import { cn } from '@/lib/utils';
+@@ -30,7 +33,10 @@ interface AdminNotification {
+     | 'vendor_application'
+     | 'vendor_bank_update'
+     | 'vendor_pickup'
+-    | 'vendor_return_pending';
++    | 'vendor_return_pending'
++    | 'review'
++    | 'new_reseller'
++    | 'new_affiliate';
+   title: string;
+   message: string;
+   section: string;
+@@ -48,6 +54,9 @@ const ICONS: Record<AdminNotification['type'], typeof Bell> = {
+   vendor_bank_update: Landmark,
+   vendor_pickup: Truck,
+   vendor_return_pending: Undo2,
++  review: Star,
++  new_reseller: Store,
++  new_affiliate: Users2,
+ };
+ 
+ const LAST_SEEN_KEY = 'admin_notifications_last_seen';

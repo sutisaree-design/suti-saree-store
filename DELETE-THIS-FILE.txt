@@ -1,0 +1,1 @@
+components/admin/variants-panel.tsx  ->  DELETE this file (moved inline into products-panel.tsx)

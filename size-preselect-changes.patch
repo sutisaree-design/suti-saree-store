@@ -1,0 +1,159 @@
+diff --git a/components/admin/product-variants-manager.tsx b/components/admin/product-variants-manager.tsx
+index 3c64bab..1cd5c71 100644
+--- a/components/admin/product-variants-manager.tsx
++++ b/components/admin/product-variants-manager.tsx
+@@ -66,7 +66,19 @@ interface VariantFormState {
+   sizes: { size: string; stockQuantity: string; priceOverride: string; sku: string }[];
+ }
+ 
+-const emptyVariantForm = (): VariantFormState => ({
++// Builds the starting size rows for a brand-new variant from the sizes
++// ticked on the main product form (e.g. "Free Size, S, M, L"). Falls back
++// to "Free Size" if the product has none selected yet.
++const defaultSizeRows = (productSizes?: string) => {
++  const sizes = (productSizes ?? '')
++    .split(',')
++    .map((s) => s.trim())
++    .filter(Boolean);
++  const list = sizes.length ? sizes : ['Free Size'];
++  return list.map((size) => ({ size, stockQuantity: '3', priceOverride: '', sku: '' }));
++};
++
++const emptyVariantForm = (productSizes?: string): VariantFormState => ({
+   color: '',
+   colorHex: '',
+   slug: '',
+@@ -79,7 +91,7 @@ const emptyVariantForm = (): VariantFormState => ({
+   isDefault: false,
+   rating: '',
+   reviews: '',
+-  sizes: [{ size: 'Free Size', stockQuantity: '3', priceOverride: '', sku: '' }],
++  sizes: defaultSizeRows(productSizes),
+ });
+ 
+ interface Props {
+@@ -87,6 +99,16 @@ interface Props {
+   productName: string;
+   productSku: string;
+   baseImage?: string;
++  // Comma-separated list from the main product's "Colours" field. The
++  // first entry is the product's own base colour (never a real row in
++  // product_variants until explicitly converted -- see
++  // "Add original colour as a variant" button below).
++  productColors?: string;
++  // Comma-separated list of sizes ticked in the main product's "Sizes"
++  // field (e.g. "Free Size, S, M, L"). Used to pre-select the same sizes
++  // when a new colour/variant is added, instead of always defaulting to
++  // just "Free Size".
++  productSizes?: string;
+   // When true, the "Add Variant" form opens automatically as soon as the
+   // product is ready -- lets a button outside this component (the row's
+   // "Add Variation" icon) jump straight to adding a colour without an
+@@ -106,6 +128,8 @@ export default function ProductVariantsManager({
+   productName,
+   productSku,
+   baseImage,
++  productColors,
++  productSizes,
+   autoOpenAdd,
+   onAutoOpenAddHandled,
+ }: Props) {
+@@ -114,7 +138,7 @@ export default function ProductVariantsManager({
+ 
+   const [open, setOpen] = useState(false);
+   const [editing, setEditing] = useState<VariantWithSizes | null>(null);
+-  const [form, setForm] = useState<VariantFormState>(emptyVariantForm());
++  const [form, setForm] = useState<VariantFormState>(emptyVariantForm(productSizes));
+   const [saving, setSaving] = useState(false);
+   const [uploading, setUploading] = useState(false);
+   const [importUrl, setImportUrl] = useState('');
+@@ -146,8 +170,39 @@ export default function ProductVariantsManager({
+   const openNew = () => {
+     setEditing(null);
+     setForm({
+-      ...emptyVariantForm(),
++      ...emptyVariantForm(productSizes),
++      images: baseImage ? [baseImage] : [],
++    });
++    setOpen(true);
++  };
++
++  // The product's own base colour (first entry of the "Colours" field on
++  // the main product form) -- only relevant when there's a real size
++  // spread to price separately. A single "Free Size" product has nothing
++  // to gain from a size-price grid, so the button below only shows once
++  // more than one size is selected.
++  const baseColorName = (productColors ?? '').split(',')[0]?.trim() || '';
++  const productSizeList = (productSizes ?? '')
++    .split(',')
++    .map((s) => s.trim())
++    .filter(Boolean);
++  const hasMultipleSizes = productSizeList.length > 1;
++  const baseColorAlreadyVariant = baseColorName
++    ? variants.some((v) => v.color.trim().toLowerCase() === baseColorName.toLowerCase())
++    : false;
++  const showConvertBaseColorButton = !!baseColorName && hasMultipleSizes && !baseColorAlreadyVariant;
++
++  // Turns the base colour into a proper variant row, pre-filled with its
++  // name, image and the product's sizes -- the admin just fills in
++  // price/stock per size and hits "Add Variant".
++  const openNewFromBaseColour = () => {
++    setEditing(null);
++    setForm({
++      ...emptyVariantForm(productSizes),
++      color: baseColorName,
++      colorHex: findPresetByName(baseColorName)?.hex ?? '',
+       images: baseImage ? [baseImage] : [],
++      isDefault: true,
+     });
+     setOpen(true);
+   };
+@@ -185,7 +240,7 @@ export default function ProductVariantsManager({
+             priceOverride: s.price_override != null ? String(s.price_override) : '',
+             sku: s.sku ?? '',
+           }))
+-        : [{ size: 'Free Size', stockQuantity: '3', priceOverride: '', sku: '' }],
++        : defaultSizeRows(productSizes),
+     });
+     setOpen(true);
+   };
+@@ -470,9 +525,23 @@ export default function ProductVariantsManager({
+             Each colour gets its own photos, SKU and per-size stock — managed right here.
+           </p>
+         </div>
+-        <Button type="button" size="sm" variant="outline" onClick={openNew} className="shrink-0 gap-1.5">
+-          <Plus className="h-3.5 w-3.5" /> Add colour
+-        </Button>
++        <div className="flex shrink-0 gap-1.5">
++          {showConvertBaseColorButton && (
++            <Button
++              type="button"
++              size="sm"
++              variant="outline"
++              onClick={openNewFromBaseColour}
++              className="gap-1.5"
++              title={`"${baseColorName}" is the product's own colour and isn't priced per-size yet`}
++            >
++              <Plus className="h-3.5 w-3.5" /> Add &quot;{baseColorName}&quot; as variant
++            </Button>
++          )}
++          <Button type="button" size="sm" variant="outline" onClick={openNew} className="gap-1.5">
++            <Plus className="h-3.5 w-3.5" /> Add colour
++          </Button>
++        </div>
+       </div>
+ 
+       {loading ? (
+diff --git a/components/admin/products-panel.tsx b/components/admin/products-panel.tsx
+index 0efc7ea..8ac5418 100644
+--- a/components/admin/products-panel.tsx
++++ b/components/admin/products-panel.tsx
+@@ -2371,6 +2371,8 @@ export default function ProductsPanel() {
+               productName={form.name}
+               productSku={form.sku}
+               baseImage={form.images[0]}
++              productColors={form.colors}
++              productSizes={form.sizes}
+               autoOpenAdd={autoOpenVariantAdd}
+               onAutoOpenAddHandled={() => setAutoOpenVariantAdd(false)}
+             />
