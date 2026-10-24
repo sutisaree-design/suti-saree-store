@@ -150,11 +150,11 @@ export async function generateMetadata(): Promise<Metadata> {
       images: seo.og_image ? [seo.og_image] : undefined,
     },
     robots: {
-      index: true,
-      follow: true,
+      index: process.env.ALLOW_INDEXING === 'true',
+      follow: process.env.ALLOW_INDEXING === 'true',
       googleBot: {
-        index: true,
-        follow: true,
+        index: process.env.ALLOW_INDEXING === 'true',
+        follow: process.env.ALLOW_INDEXING === 'true',
         'max-image-preview': 'large',
       },
     },
