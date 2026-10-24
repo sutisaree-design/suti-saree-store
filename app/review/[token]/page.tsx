@@ -591,7 +591,6 @@ function BrandHeader() {
     <div className="text-center">
       <div className="font-serif text-2xl font-bold">
         <span className="text-primary">Sutisaree</span>
-        <span className="text-secondary">Handlooms</span>
       </div>
       <div className="mx-auto mt-1.5 h-px w-12 bg-secondary/60" />
       <p className="mt-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Handwoven Ethnic Wear</p>

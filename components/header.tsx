@@ -537,7 +537,6 @@ export default function Header() {
                   className="flex items-center gap-0"
                 >
                   <span className="font-serif text-2xl font-bold text-primary-foreground">Sutisaree</span>
-                  <span className="font-serif text-2xl font-bold text-secondary">Handlooms</span>
                 </Link>
                 <span className="text-[10px] font-medium uppercase tracking-[0.25em] text-primary-foreground/70">
                   Where Craft Meets Culture
@@ -691,9 +690,6 @@ export default function Header() {
           <Link href="/" className="flex shrink-0 items-center gap-0">
             <span className="whitespace-nowrap font-serif text-lg font-bold tracking-tight text-primary sm:text-2xl">
               Sutisaree
-            </span>
-            <span className="whitespace-nowrap font-serif text-lg font-bold tracking-tight text-secondary sm:text-2xl">
-              Handlooms
             </span>
           </Link>
         </div>
