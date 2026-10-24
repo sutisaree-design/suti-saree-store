@@ -10,7 +10,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // preview is unreliable with webp -- it often shows the bare domain and no
 // picture at all. This route re-encodes the order's first item photo as a
 // small square JPEG (which WhatsApp always renders) and serves it from OUR
-// domain (aruhihandlooms.com/api/og/pay/<order id>), not the storage host.
+// domain (sutisaree.com/api/og/pay/<order id>), not the storage host.
 //
 // Same access model as /checkout/resume/[id] and /order-confirmation/[id]:
 // the order id is an unguessable UUID. Only the product photo is exposed --
@@ -18,10 +18,10 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 export const runtime = 'nodejs';
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
 
 // Only ever fetch images from hosts we already store/serve product photos on.
-const ALLOWED_HOST_SUFFIXES = ['.supabase.co', 'aruhihandlooms.com', 'images.pexels.com', 'images.unsplash.com'];
+const ALLOWED_HOST_SUFFIXES = ['.supabase.co', 'sutisaree.com', 'images.pexels.com', 'images.unsplash.com'];
 
 function isAllowedImageUrl(u: URL) {
   if (u.protocol !== 'https:') return false;

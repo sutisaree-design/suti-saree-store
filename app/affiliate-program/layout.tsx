@@ -4,9 +4,9 @@ import type { Metadata } from 'next';
 // `metadata` itself — this sibling layout supplies it instead, same
 // pattern used by /sell-with-us, /refer-earn and /loyalty.
 export const metadata: Metadata = {
-  title: 'Affiliate Program — AruhiHandlooms',
+  title: 'Affiliate Program — Sutisaree',
   description:
-    'Join the AruhiHandlooms affiliate programme and earn commission on every order placed through your unique referral link.',
+    'Join the Sutisaree affiliate programme and earn commission on every order placed through your unique referral link.',
   alternates: { canonical: '/affiliate-program' },
 };
 

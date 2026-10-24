@@ -78,7 +78,7 @@ function buildPrompt(input: {
   pattern: string;
   hasImage: boolean;
 }) {
-  return `You are an SEO copywriter and Google Merchant Center data specialist for "AruhiHandlooms", an Indian ethnic-wear e-commerce store selling handwoven sarees, lehengas, bridal wear and kurtis.
+  return `You are an SEO copywriter and Google Merchant Center data specialist for "Sutisaree", an Indian ethnic-wear e-commerce store selling handwoven sarees, lehengas, bridal wear and kurtis.
 
 ${input.hasImage ? 'A photo of the actual product is attached — look at it closely and base the fabric, color, motifs, and craft details on what you actually see in the image.' : ''}
 
@@ -120,7 +120,7 @@ Respond with ONLY a JSON object (no markdown fences, no preamble) with these exa
     "pallu_details": "e.g. 'Same as Saree', 'Contrast Pallu', 'Zari Pallu', 'Printed Pallu' — leave '' if not applicable",
     "blouse_pattern": "e.g. 'Solid', 'Printed', 'Embroidered' — leave '' if no blouse piece included",
     "blouse_color": "e.g. 'Black', 'Gold', 'Ivory' — leave '' if no blouse piece included, match the actual photo",
-    "brand": "the store's own brand name for this listing, e.g. 'AruhiHandlooms' — leave '' if unsure, don't invent an unrelated brand",
+    "brand": "the store's own brand name for this listing, e.g. 'Sutisaree' — leave '' if unsure, don't invent an unrelated brand",
     "loom_type": "e.g. 'Handloom', 'Powerloom' — your best estimate from the photo/notes, leave '' if genuinely unclear",
     "fit_shape": "e.g. 'Fit and Flare', 'Straight', 'A-Line' — leave '' if not applicable to this product type",
     "length": "e.g. 'Calf-Length', 'Ankle-Length', 'Saree Length (5.5 m)'",

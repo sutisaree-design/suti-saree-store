@@ -25,7 +25,7 @@ async function getContent() {
 export async function generateMetadata(): Promise<Metadata> {
   const c = await getContent();
   return {
-    title: 'Vendor Login — AruhiHandlooms Vendor Dashboard',
+    title: 'Vendor Login — Sutisaree Vendor Dashboard',
     description: c.hero_subtext,
     alternates: { canonical: '/vendor-login' },
   };

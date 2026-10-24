@@ -1,7 +1,7 @@
 // Rewrites storage URLs into our own domain via the /media proxy
 // (see app/media/[...path]/route.ts), so every place a media URL gets
 // published externally — sitemap, Merchant Center/Pinterest feed,
-// JSON-LD video/image schema — shows aruhihandlooms.com instead of any
+// JSON-LD video/image schema — shows sutisaree.com instead of any
 // storage provider's host.
 //
 // DUAL-WRITE UPDATE (feature/media-dual-write-toggle)
@@ -16,7 +16,7 @@
 //      so existing rows keep resolving correctly.
 // No existing DB row is modified — rewriting happens only at read time.
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
 const SUPABASE_PUBLIC_MARKER = '/storage/v1/object/public/';
 
 // The R2 CDN domain used while STORAGE_PROVIDER=r2 was active (the bug).

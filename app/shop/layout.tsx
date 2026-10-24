@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 export const metadata: Metadata = {
   title: 'Shop All Sarees & Ethnic Wear',
@@ -10,11 +10,11 @@ export const metadata: Metadata = {
     canonical: `${SITE_URL}/shop`,
   },
   openGraph: {
-    title: 'Shop All Sarees & Ethnic Wear | AruhiHandlooms',
+    title: 'Shop All Sarees & Ethnic Wear | Sutisaree',
     description:
       'Browse our full collection of handwoven silk sarees, cotton sarees, lehengas, anarkalis, kurtis and bridal wear.',
     url: `${SITE_URL}/shop`,
-    siteName: 'AruhiHandlooms',
+    siteName: 'Sutisaree',
     type: 'website',
   },
 };

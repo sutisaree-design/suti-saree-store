@@ -9,7 +9,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Vendor Registration — Sell With Us',
   description:
-    'Apply to become a supplying vendor for AruhiHandlooms. Submit your business details and start selling handloom sarees and ethnic wear.',
+    'Apply to become a supplying vendor for Sutisaree. Submit your business details and start selling handloom sarees and ethnic wear.',
   alternates: { canonical: '/sell-with-us' },
 };
 

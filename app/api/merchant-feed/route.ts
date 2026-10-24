@@ -7,7 +7,7 @@ import { resolveGoogleProductCategory } from '@/lib/google-category';
 import { toPublicMediaUrls } from '@/lib/media-url';
 import type { Product } from '@/lib/types';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // Without this, Next.js treats this route as static (no request params,
 // no cookies/headers used) and bakes the response ONCE at build time --
@@ -101,7 +101,7 @@ export async function GET() {
     return new NextResponse('Merchant feed is disabled in Admin > Marketing.', { status: 404 });
   }
 
-  const brand = marketing.merchant_feed_brand || 'AruhiHandlooms';
+  const brand = marketing.merchant_feed_brand || 'Sutisaree';
   const products = await fetchProductsServer();
   const variantsByProduct = await fetchVariantsForFeed(products.map((p) => p.id));
 
@@ -138,7 +138,7 @@ export async function GET() {
     const { id, itemGroupId, title, link, images: rawImages, inStock, price, mrp, color, size, product } = opts;
     // Rewrites Supabase Storage URLs to our own domain (see lib/media-url.ts)
     // so Merchant Center and Pinterest's feed-derived catalog show
-    // aruhihandlooms.com image links instead of the storage provider's host.
+    // sutisaree.com image links instead of the storage provider's host.
     const images = toPublicMediaUrls(rawImages);
     const image = images[0] || '';
     const extraImages = images

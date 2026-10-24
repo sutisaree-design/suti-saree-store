@@ -50,7 +50,7 @@ export default function AffiliateProgramPage() {
             Turn your audience into income
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            Love recommending AruhiHandlooms sarees already? Join our affiliate programme and earn
+            Love recommending Sutisaree sarees already? Join our affiliate programme and earn
             real commission every time someone buys through your link.
           </p>
 

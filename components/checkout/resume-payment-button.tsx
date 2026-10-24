@@ -104,7 +104,7 @@ export default function ResumePaymentButton({
         const rzp = new window.Razorpay({
           key: createOrderData.keyId,
           order_id: createOrderData.order.id,
-          name: 'AruhiHandlooms',
+          name: 'Sutisaree',
           description: 'Handwoven Ethnic Wear Purchase',
           image: 'https://images.pexels.com/photos/1191349/pexels-photo-1191349.jpeg?auto=compress&cs=tinysrgb&w=200',
           prefill: {

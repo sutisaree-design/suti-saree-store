@@ -43,7 +43,7 @@ async function buildPreview(orderId: string, type: string, dateOverride?: string
       : [
           {
             product_name: 'Sample Saree',
-            image_url: 'https://placehold.co/96x96/7c3a1d/fff?text=Aruhi',
+            image_url: 'https://placehold.co/96x96/7c3a1d/fff?text=Sutisaree',
             size: 'Free Size',
             quantity: 1,
             price: order.total_amount || 1999,

@@ -6,16 +6,16 @@ import { computeDiscountedPrice } from './cart-recovery-settings';
 
 const BRAND_COLOR = '#7c3a1d';
 const GOLD_ACCENT = '#c9a15a';
-const SITE_NAME = 'AruhiHandlooms';
+const SITE_NAME = 'Sutisaree';
 // Exact colours the live site uses for the wordmark itself (Tailwind
 // `text-primary` / `text-secondary` -- see app/globals.css's --primary /
 // --secondary HSL vars, converted to hex here since email clients don't
 // resolve CSS custom properties). Deliberately kept separate from
 // BRAND_COLOR/GOLD_ACCENT above, which are this email shell's own accent
 // colours and were never meant to be the logo's colours -- that mismatch
-// (a plain white "ARUHIHANDLOOMS" wordmark on a maroon-orange banner) is
+// (a plain white "SUTISAREE" wordmark on a maroon-orange banner) is
 // exactly why the email header looked like a different brand from the
-// site header/footer's actual two-tone "Aruhi" + "Handlooms" logo.
+// site header/footer's actual two-tone "Sutisaree" + "Handlooms" logo.
 const LOGO_PRIMARY = '#721d32';
 const LOGO_SECONDARY = '#daaa2f';
 
@@ -51,7 +51,7 @@ function wrapper(
             <tr>
               <td style="background:#fffaf5; padding: 28px 24px 22px; text-align:center; border-bottom: 1px solid #ecdfd2;">
                 <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight:bold;">
-                  <span style="color:${LOGO_PRIMARY};">Aruhi</span><span style="color:${LOGO_SECONDARY};">Handlooms</span>
+                  <span style="color:${LOGO_PRIMARY};">Sutisaree</span><span style="color:${LOGO_SECONDARY};">Handlooms</span>
                 </div>
                 <div style="margin: 8px auto 0; width: 48px; border-top: 2px solid ${LOGO_SECONDARY};"></div>
                 <div style="margin-top: 8px; color: #9a8f87; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">Handwoven Ethnic Wear</div>

@@ -192,7 +192,7 @@ export default function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex-shrink-0">
             <span className="font-serif text-xl sm:text-2xl font-bold text-[#7B1C2E] tracking-tight">
-              Aruhi<span className="text-[#C9A86C] font-light">Handlooms</span>
+              Sutisaree<span className="text-[#C9A86C] font-light">Handlooms</span>
             </span>
           </Link>
 
@@ -408,7 +408,7 @@ export default function Navbar() {
         {/* Drawer Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-[#7B1C2E]">
           <span className="font-serif text-xl font-bold text-white tracking-tight">
-            Aruhi<span className="text-[#C9A86C] font-light">Handlooms</span>
+            Sutisaree<span className="text-[#C9A86C] font-light">Handlooms</span>
           </span>
           <button
             onClick={() => { setMobileOpen(false); setMobileSection(null); }}

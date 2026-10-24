@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
 import { requestGoogleIndexing } from '@/lib/google-indexing';
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
 
 // The admin blog editor (components/admin/blog-panel.tsx) writes posts
 // straight to Supabase from the browser -- there's no server route in the

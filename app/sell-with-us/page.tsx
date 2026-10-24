@@ -118,7 +118,7 @@ export default function SellWithUsPage() {
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Vendor Sourcing</p>
       <h1 className="mt-1 font-serif text-3xl font-bold text-primary sm:text-4xl">Sell With Us</h1>
       <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
-        Partner with AruhiHandlooms as a supplying vendor. This is an internal sourcing
+        Partner with Sutisaree as a supplying vendor. This is an internal sourcing
         relationship — your business is never shown publicly on the site; we photograph,
         list, and ship every order to your customer under our own name.
       </p>
@@ -142,7 +142,7 @@ export default function SellWithUsPage() {
           <Store className="mx-auto h-8 w-8 text-primary" />
           <p className="mt-3 font-serif text-lg font-semibold text-primary">Log in to apply</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Vendor applications use the same login as your regular AruhiHandlooms account.
+            Vendor applications use the same login as your regular Sutisaree account.
           </p>
           <div className="mt-5 flex justify-center gap-3">
             <Link href="/login?next=/sell-with-us">

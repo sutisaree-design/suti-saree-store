@@ -23,7 +23,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // refreshes and multiple admins don't stomp on each other's runs.
 // -----------------------------------------------------------------------
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
 const BATCH_SIZE = 8; // small on purpose — keeps each request fast & safe under free-tier duration limits
 
 type WarmStatus = {

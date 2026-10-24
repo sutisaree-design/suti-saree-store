@@ -71,7 +71,7 @@ export async function resolveEmailConfig(): Promise<ResolvedEmailConfig> {
       provider,
       apiKey: dbConfig?.api_key || process.env.ZEPTOMAIL_API_KEY || '',
       senderEmail: dbConfig?.sender_email || process.env.EMAIL_FROM_ADDRESS || '',
-      senderName: dbConfig?.sender_name || process.env.EMAIL_FROM_NAME || 'AruhiHandlooms',
+      senderName: dbConfig?.sender_name || process.env.EMAIL_FROM_NAME || 'Sutisaree',
       zeptomailRegion:
         (dbConfig?.zeptomail_region || process.env.ZEPTOMAIL_REGION || 'in') === 'com' ? 'com' : 'in',
     };
@@ -82,7 +82,7 @@ export async function resolveEmailConfig(): Promise<ResolvedEmailConfig> {
     provider: provider === 'resend' ? 'resend' : provider,
     apiKey: dbConfig?.api_key || process.env.RESEND_API_KEY || '',
     senderEmail: dbConfig?.sender_email || process.env.EMAIL_FROM_ADDRESS || '',
-    senderName: dbConfig?.sender_name || process.env.EMAIL_FROM_NAME || 'AruhiHandlooms',
+    senderName: dbConfig?.sender_name || process.env.EMAIL_FROM_NAME || 'Sutisaree',
     zeptomailRegion: 'in',
   };
 }
@@ -90,7 +90,7 @@ export async function resolveEmailConfig(): Promise<ResolvedEmailConfig> {
 async function sendViaResend(cfg: ResolvedEmailConfig, args: SendEmailArgs) {
   const from = cfg.senderEmail
     ? `${cfg.senderName} <${cfg.senderEmail}>`
-    : 'AruhiHandlooms <onboarding@resend.dev>';
+    : 'Sutisaree <onboarding@resend.dev>';
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

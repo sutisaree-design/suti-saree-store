@@ -10,7 +10,7 @@ import { verifyReviewToken } from '@/lib/review-link-tokens';
 export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
   const base: Metadata = { title: 'Rate your order', robots: { index: false, follow: false } };
   try {
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
     const verified = await verifyReviewToken(params.token);
     if (!verified) return base;
 
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
     const more = items.length > 1 ? ` +${items.length - 1} more` : '';
     const hasImage = items.some((it) => it?.image_url || it?.image || it?.images?.[0]);
 
-    const title = `How was your ${itemName}? · Aruhi Handlooms`;
+    const title = `How was your ${itemName}? · Sutisaree`;
     const description = `Tap to rate${more} and share a photo. It takes less than a minute.`;
 
     return {
@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
         title,
         description,
         url: `${siteUrl}/review/${params.token}`,
-        siteName: 'Aruhi Handlooms',
+        siteName: 'Sutisaree',
         type: 'website',
         ...(hasImage
           ? { images: [{ url: `${siteUrl}/api/og/pay/${order.id}`, width: 800, height: 800, alt: itemName }] }

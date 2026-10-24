@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
     <div className="relative min-h-[70vh] overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/80 md:flex md:min-h-[70vh] md:items-center md:justify-center md:bg-none md:py-16">
       {/* Decorative brand panel — mobile only, sits behind the sheet below */}
       <div className="flex flex-col items-center gap-2 px-6 pb-44 pt-16 text-center text-primary-foreground md:hidden">
-        <span className="font-serif text-3xl font-bold text-secondary">Aruhi</span>
+        <span className="font-serif text-3xl font-bold text-secondary">Sutisaree</span>
         <p className="text-sm text-primary-foreground/80">
           Get personalised suggestions, offers &amp; more
         </p>

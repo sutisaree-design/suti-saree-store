@@ -25,7 +25,7 @@ const playfair = Playfair_Display({
   display: 'swap',
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // NOTE: force-dynamic used to live here to keep SEO/analytics settings
 // fresh after an admin save. The problem: dynamic = 'force-dynamic' on the
@@ -48,7 +48,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms
 export const revalidate = 1800;
 
 const DEFAULT_SEO: SeoSettings = {
-  site_title: 'AruhiHandlooms — Handwoven Indian Ethnic Wear & Sarees',
+  site_title: 'Sutisaree — Handwoven Indian Ethnic Wear & Sarees',
   meta_description:
     'Discover handpicked sarees, lehengas and ethnic wear from master weavers across India. Timeless craftsmanship, modern convenience.',
   keywords:
@@ -115,7 +115,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(SITE_URL),
     title: {
       default: seo.site_title,
-      template: '%s | AruhiHandlooms',
+      template: '%s | Sutisaree',
     },
     description: seo.meta_description,
     keywords,
@@ -130,7 +130,7 @@ export async function generateMetadata(): Promise<Metadata> {
       // chrome) behaviour there.
       capable: true,
       statusBarStyle: 'default',
-      title: 'Aruhi Admin',
+      title: 'Sutisaree Admin',
     },
     alternates: {
       canonical: '/',
@@ -138,7 +138,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title: seo.site_title,
       description: seo.meta_description,
-      siteName: 'AruhiHandlooms',
+      siteName: 'Sutisaree',
       type: 'website',
       url: SITE_URL,
       images: seo.og_image ? [{ url: seo.og_image }] : undefined,

@@ -185,12 +185,12 @@ function buildWhatsAppRecoveryLink(
   if (digits.startsWith('0') && digits.length === 11) digits = digits.slice(1);
   if (!/^[6-9][0-9]{9}$/.test(digits)) return null;
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
   const itemLines = (items || []).slice(0, 5).map((it) => `• ${describeItem(it)}`).join('\n');
 
   const messageParts = [
-    `Hello, this is AruhiHandlooms.`,
+    `Hello, this is Sutisaree.`,
     `We noticed you left ${items?.length > 1 ? 'the following items' : 'the following item'} in your cart${
       cartValue ? ` (total value ${formatINR(cartValue)})` : ''
     }:`,
@@ -228,7 +228,7 @@ function buildUrgencyWhatsAppLink(
   if (digits.startsWith('0') && digits.length === 11) digits = digits.slice(1);
   if (!/^[6-9][0-9]{9}$/.test(digits)) return null;
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
   const itemLines = (items || []).slice(0, 5).map((it) => `• ${describeItem(it)}`).join('\n');
 
   const finalPrice = computeDiscountedPrice(cartValue, settings.discount_type, settings.discount_value);
@@ -248,7 +248,7 @@ function buildUrgencyWhatsAppLink(
     : `Just reply to this message and we'll apply it for you.${priceLine}`;
 
   const messageParts = [
-    `Hello again, this is AruhiHandlooms 🙏`,
+    `Hello again, this is Sutisaree 🙏`,
     `We hope you're doing well! We noticed ${items?.length > 1 ? 'these items are' : 'this item is'} still waiting in your cart${
       cartValue ? ` (total value ${formatINR(cartValue)})` : ''
     }, so we wanted to check in gently:`,

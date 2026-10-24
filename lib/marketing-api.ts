@@ -244,13 +244,13 @@ For orders placed using Partial Pay, only the advance is collected online before
 
 In exceptional cases we may, at our discretion, refund the advance even where it is otherwise non-refundable.`;
 
-// AruhiHandlooms-specific ready-to-paste templates for Privacy Policy and
+// Sutisaree-specific ready-to-paste templates for Privacy Policy and
 // Terms & Conditions. These don't currently carry {{fulfillment}} tokens
 // (nothing in the source text maps to a Fulfillment Settings number), but
 // they're still run through applyFulfillmentTokens() on display like the
 // other two, so any tokens added here later resolve automatically without
 // further code changes.
-export const PRIVACY_POLICY_TEMPLATE = `AruhiHandlooms ("we", "us", "our") operates the website aruhihandlooms.com. This Privacy Policy explains how we collect, use, store and protect your personal information when you visit our website or make a purchase.
+export const PRIVACY_POLICY_TEMPLATE = `Sutisaree ("we", "us", "our") operates the website sutisaree.com. This Privacy Policy explains how we collect, use, store and protect your personal information when you visit our website or make a purchase.
 
 Information We Collect
 We collect information you provide directly to us, including your name, email address, phone number, shipping and billing address, and payment details when you place an order, create an account, or contact us. We also automatically collect certain information such as your IP address, browser type, and browsing behaviour on our site through cookies and analytics tools.
@@ -286,7 +286,7 @@ Data Security
 We take reasonable technical and organisational measures to protect your personal information from unauthorised access, alteration, or disclosure.
 
 Your Rights
-You may request access to, correction of, or deletion of your personal data by contacting us at contact@aruhihandlooms.com. You may also unsubscribe from marketing communications at any time.
+You may request access to, correction of, or deletion of your personal data by contacting us at contact@sutisaree.com. You may also unsubscribe from marketing communications at any time.
 
 Children's Privacy
 Our website is not directed at children under 18. We do not knowingly collect personal information from children.
@@ -296,14 +296,14 @@ We may update this Privacy Policy from time to time. Any changes will be posted 
 
 Contact Us
 If you have any questions about this Privacy Policy, please contact us at:
-Email: contact@aruhihandlooms.com
+Email: contact@sutisaree.com
 Phone: +91 98045 91992
 Address: Bora, Mamudpur, Naihati, North 24 Parganas, West Bengal - 743166`;
 
-export const TERMS_CONDITIONS_TEMPLATE = `Welcome to AruhiHandlooms (aruhihandlooms.com). By accessing or using our website, you agree to be bound by the following Terms & Conditions. Please read them carefully before making a purchase.
+export const TERMS_CONDITIONS_TEMPLATE = `Welcome to Sutisaree (sutisaree.com). By accessing or using our website, you agree to be bound by the following Terms & Conditions. Please read them carefully before making a purchase.
 
 General
-These terms apply to all visitors, users, and customers of aruhihandlooms.com. By placing an order, you confirm that you are at least 18 years old or are using the site under the supervision of a parent/guardian.
+These terms apply to all visitors, users, and customers of sutisaree.com. By placing an order, you confirm that you are at least 18 years old or are using the site under the supervision of a parent/guardian.
 
 Products
 We make every effort to display our products, including colours and fabric details, as accurately as possible. However, slight variations in colour may occur due to photography, lighting, and screen settings, as our sarees and ethnic wear are handwoven/handcrafted and may have natural variations.
@@ -330,19 +330,19 @@ Referral Program
 If enabled, our referral program lets existing customers invite others to shop with us in exchange for reward points for both the referrer and the referred customer, as described on the site at the time of referral. Referral rewards are credited only once the referred customer's qualifying order is completed and are subject to the same non-cash, non-transferable terms as loyalty points. We reserve the right to withhold or reverse rewards, and to suspend accounts, in cases of suspected abuse, self-referral, or fraud, and may modify or discontinue the program at any time.
 
 Gift Cards
-Gift cards purchased on our site are valid for the period shown at the time of purchase from the date of issue, are redeemable only for purchases on aruhihandlooms.com, cannot be redeemed for cash (in whole or in part) except where required by law, and are non-refundable once issued. You are responsible for keeping your gift card code secure; we are not liable for gift cards lost, stolen, or redeemed without authorisation due to a code being shared or compromised. Unused balances after expiry may be forfeited, subject to applicable law.
+Gift cards purchased on our site are valid for the period shown at the time of purchase from the date of issue, are redeemable only for purchases on sutisaree.com, cannot be redeemed for cash (in whole or in part) except where required by law, and are non-refundable once issued. You are responsible for keeping your gift card code secure; we are not liable for gift cards lost, stolen, or redeemed without authorisation due to a code being shared or compromised. Unused balances after expiry may be forfeited, subject to applicable law.
 
 Reseller and Wholesale Program
-We may allow eligible customers to join our reseller or wholesale program to purchase products at a different price for resale, subject to the terms shown at the time of joining. Participants in this program act on their own behalf and are independently responsible for their own pricing, marketing, and representations to their end-customers; AruhiHandlooms is not a party to and is not liable for arrangements between a reseller/wholesale participant and their customers. We reserve the right to approve, suspend, or terminate any reseller or wholesale account at our discretion.
+We may allow eligible customers to join our reseller or wholesale program to purchase products at a different price for resale, subject to the terms shown at the time of joining. Participants in this program act on their own behalf and are independently responsible for their own pricing, marketing, and representations to their end-customers; Sutisaree is not a party to and is not liable for arrangements between a reseller/wholesale participant and their customers. We reserve the right to approve, suspend, or terminate any reseller or wholesale account at our discretion.
 
 Product Reviews
 When you submit a product review, you confirm the content is your own genuine opinion and that you have not been paid or incentivised to post it unless we have explicitly disclosed otherwise. We may moderate, edit for length, or decline to publish reviews that are abusive, irrelevant, contain personal information about others, or otherwise violate these Terms, and may remove any review at our discretion.
 
 Intellectual Property
-All content on this website, including images, logos, and text, is the property of AruhiHandlooms and may not be reproduced or used without our written permission.
+All content on this website, including images, logos, and text, is the property of Sutisaree and may not be reproduced or used without our written permission.
 
 Limitation of Liability
-AruhiHandlooms shall not be liable for any indirect, incidental, or consequential damages arising from the use of our website or products, to the extent permitted by law.
+Sutisaree shall not be liable for any indirect, incidental, or consequential damages arising from the use of our website or products, to the extent permitted by law.
 
 Governing Law
 These Terms & Conditions are governed by the laws of India. Any disputes shall be subject to the jurisdiction of the courts in North 24 Parganas, West Bengal, India.
@@ -352,7 +352,7 @@ We may revise these Terms & Conditions at any time. Continued use of the website
 
 Contact Us
 For any questions regarding these Terms & Conditions, contact us at:
-Email: contact@aruhihandlooms.com
+Email: contact@sutisaree.com
 Phone: +91 98045 91992`;
 
 // ---------------------------------------------------------------------
@@ -441,7 +441,7 @@ const DEFAULT_MARKETING_SETTINGS: MarketingSettings = {
   whatsapp_number: '',
   whatsapp_message: 'Hi! I have a question about your products.',
   merchant_feed_enabled: true,
-  merchant_feed_brand: 'AruhiHandlooms',
+  merchant_feed_brand: 'Sutisaree',
   newsletter_enabled: true,
 };
 
@@ -517,7 +517,7 @@ export interface SeoSettings {
 }
 
 const DEFAULT_SEO_SETTINGS: SeoSettings = {
-  site_title: 'AruhiHandlooms — Handwoven Indian Ethnic Wear & Sarees',
+  site_title: 'Sutisaree — Handwoven Indian Ethnic Wear & Sarees',
   meta_description:
     'Discover handpicked sarees, lehengas and ethnic wear from master weavers across India. Timeless craftsmanship, modern convenience.',
   keywords: 'saree, ethnic wear, Indian boutique, handwoven sarees, lehenga, silk saree, banarasi, kanjivaram, bridal saree',

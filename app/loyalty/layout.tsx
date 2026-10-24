@@ -4,9 +4,9 @@ import type { Metadata } from 'next';
 // `metadata` itself — this sibling layout supplies it instead, same
 // pattern used by /sell-with-us and /refer-earn.
 export const metadata: Metadata = {
-  title: 'Loyalty Rewards — AruhiHandlooms',
+  title: 'Loyalty Rewards — Sutisaree',
   description:
-    'Earn reward points on every order at AruhiHandlooms and redeem them for discounts on your next handloom saree.',
+    'Earn reward points on every order at Sutisaree and redeem them for discounts on your next handloom saree.',
   alternates: { canonical: '/loyalty' },
 };
 

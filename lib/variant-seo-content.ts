@@ -220,7 +220,7 @@ export function generateVariantSeoContent(input: VariantSeoInput): VariantSeoOut
   const keywordTitleCase = keyword.replace(/\b\w/g, (c) => c.toUpperCase());
 
   const metaTitle = truncate(
-    `${color} ${keywordTitleCase} – ${baseName} | AruhiHandlooms`,
+    `${color} ${keywordTitleCase} – ${baseName} | Sutisaree`,
     100
   );
 

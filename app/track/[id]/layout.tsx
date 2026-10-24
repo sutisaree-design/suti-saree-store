@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const base: Metadata = { title: 'Track your order' };
   try {
     if (!/^[0-9a-f-]{36}$/i.test(params.id)) return base;
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
     const supabase = getSupabaseAdmin();
     const { data: order } = await supabase.from('orders').select('id, items, status').eq('id', params.id).maybeSingle();
     if (!order) return base;
@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     const shortId = String(order.id).slice(0, 8).toUpperCase();
     const hasImage = items.some((it) => it?.image_url || it?.image || it?.images?.[0]);
 
-    const title = `Order #${shortId} · ${STATUS_WORD[order.status] || 'Track your order'} · Aruhi Handlooms`;
+    const title = `Order #${shortId} · ${STATUS_WORD[order.status] || 'Track your order'} · Sutisaree`;
     const description = `${itemName}${more}. Tap to see your order status.`;
 
     return {
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
         title,
         description,
         url: `${siteUrl}/track/${order.id}`,
-        siteName: 'Aruhi Handlooms',
+        siteName: 'Sutisaree',
         type: 'website',
         ...(hasImage
           ? { images: [{ url: `${siteUrl}/api/og/pay/${order.id}`, width: 800, height: 800, alt: itemName }] }

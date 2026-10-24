@@ -66,7 +66,7 @@ export default function StockNotificationsPanel() {
 
   const sendWhatsapp = async (row: StockNotificationRow, productName: string, slug: string) => {
     const site = (process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
-    const text = `Hi! Good news — ${productName} is back in stock at Aruhi Handlooms. Grab it before it sells out again: ${site}/product/${slug}`;
+    const text = `Hi! Good news — ${productName} is back in stock at Sutisaree. Grab it before it sells out again: ${site}/product/${slug}`;
     const phone = (row.phone || '').replace(/\D/g, '');
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
     try {

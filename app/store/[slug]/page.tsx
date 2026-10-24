@@ -15,17 +15,17 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
     if (!vendor) {
       return {
-        title: 'Store not found | AruhiHandlooms',
+        title: 'Store not found | Sutisaree',
         robots: { index: false, follow: true },
       };
     }
 
     return {
-      title: `${vendor.business_name} | AruhiHandlooms`,
-      description: `Shop the full collection from ${vendor.business_name} on AruhiHandlooms.`,
+      title: `${vendor.business_name} | Sutisaree`,
+      description: `Shop the full collection from ${vendor.business_name} on Sutisaree.`,
     };
   } catch {
-    return { title: 'AruhiHandlooms' };
+    return { title: 'Sutisaree' };
   }
 }
 

@@ -27,7 +27,7 @@ import { toPublicMediaUrl } from '@/lib/media-url';
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const base: Metadata = { title: 'Complete your payment', robots: { index: false, follow: false } };
   try {
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
     const supabase = getSupabaseAdmin();
     const { data: order } = await supabase
       .from('orders')
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     const shortId = String(order.id).slice(0, 8).toUpperCase();
     const hasImage = items.some((it) => it?.image_url || it?.image || it?.images?.[0]);
 
-    const title = 'Complete your payment · AruhiHandlooms';
+    const title = 'Complete your payment · Sutisaree';
     const description = `Order #${shortId} · ${itemName}${more} · Tap to pay ${formatINR(order.total_amount || 0)} securely online`;
     const url = `${siteUrl}/checkout/resume/${order.id}`;
 
@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
         title,
         description,
         url,
-        siteName: 'AruhiHandlooms',
+        siteName: 'Sutisaree',
         type: 'website',
         ...(hasImage
           ? { images: [{ url: `${siteUrl}/api/og/pay/${order.id}`, width: 800, height: 800, alt: itemName }] }

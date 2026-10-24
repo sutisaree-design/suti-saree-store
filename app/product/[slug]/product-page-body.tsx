@@ -24,7 +24,7 @@ import { toPublicMediaUrl, toPublicMediaUrls } from '@/lib/media-url';
 import { getBlurPreviews } from '@/lib/blur-preview';
 import ProductDetail from './product-detail';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 /**
  * Resolves either a base product slug or an independent colour-variant
@@ -47,7 +47,7 @@ export async function buildProductMetadata(slug: string): Promise<Metadata> {
 
   if (!resolved) {
     return {
-      title: 'Product not found | AruhiHandlooms',
+      title: 'Product not found | Sutisaree',
       description: 'The product you are looking for does not exist.',
       robots: { index: false, follow: true },
     };
@@ -81,14 +81,14 @@ export async function buildProductMetadata(slug: string): Promise<Metadata> {
       })
     : null;
 
-  const title = variant?.meta_title || variantSeoFallback?.metaTitle || `${displayName} | AruhiHandlooms`;
+  const title = variant?.meta_title || variantSeoFallback?.metaTitle || `${displayName} | Sutisaree`;
   const description =
     variant?.meta_description ||
     variantSeoFallback?.metaDescription ||
     product.description ||
-    `Buy ${displayName} - ${product.fabric} from ${product.origin}. Handwoven ethnic wear from AruhiHandlooms.`;
+    `Buy ${displayName} - ${product.fabric} from ${product.origin}. Handwoven ethnic wear from Sutisaree.`;
   const url = `${SITE_URL}/product/${slug}`;
-  // Rewrites Supabase Storage URLs to aruhihandlooms.com (see
+  // Rewrites Supabase Storage URLs to sutisaree.com (see
   // lib/media-url.ts) so the OG/Twitter image -- what Google/social
   // crawlers actually fetch and cite -- shows our own domain.
   const images = toPublicMediaUrls(variant?.images.length ? variant.images : product.images);
@@ -104,7 +104,7 @@ export async function buildProductMetadata(slug: string): Promise<Metadata> {
       title,
       description,
       url,
-      siteName: 'AruhiHandlooms',
+      siteName: 'Sutisaree',
       images: [
         {
           url: image,
@@ -184,7 +184,7 @@ export async function ProductPageBody({ slug, size }: { slug: string; size?: str
   // has no structured signal for.
   // Rewritten to our own domain (see lib/media-url.ts) -- this is the
   // VideoObject.contentUrl/thumbnailUrl Google reads for Search Console's
-  // "Video" report, so it should show aruhihandlooms.com, not Supabase.
+  // "Video" report, so it should show sutisaree.com, not Supabase.
   const videoUrl = toPublicMediaUrl(variant?.video || product?.video_url || null);
   const videoThumbnails = toPublicMediaUrls((variant?.images.length ? variant.images : product?.images) || []);
 
@@ -226,7 +226,7 @@ export async function ProductPageBody({ slug, size }: { slug: string; size?: str
         sku: variant?.sku || product.sku || variant?.id || product.id,
         brand: {
           '@type': 'Brand',
-          name: 'AruhiHandlooms',
+          name: 'Sutisaree',
         },
         offers: {
           '@type': 'Offer',
@@ -240,7 +240,7 @@ export async function ProductPageBody({ slug, size }: { slug: string; size?: str
           itemCondition: 'https://schema.org/NewCondition',
           seller: {
             '@type': 'Organization',
-            name: 'AruhiHandlooms',
+            name: 'Sutisaree',
           },
           shippingDetails: fulfillment && shipping
             ? {

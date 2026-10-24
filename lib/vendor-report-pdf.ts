@@ -52,7 +52,7 @@ export async function generateVendorMonthlyReportPdf(
   };
 
   const drawHeader = () => {
-    draw(store.name || 'AruhiHandlooms', margin, y, { size: 18, f: bold, color: primary });
+    draw(store.name || 'Sutisaree', margin, y, { size: 18, f: bold, color: primary });
     y -= 16;
     draw('Vendor Monthly Report', margin, y, { size: 11, color: muted });
     draw(monthLabel, page.getWidth() - margin - 100, page.getHeight() - margin, { size: 11, f: bold, color: primary });

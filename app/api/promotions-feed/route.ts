@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 //
 // Add this URL in Merchant Center -> Marketing -> Promotions ->
 // Add promotions -> "Add promotions from a file" -> "Enter a link to your file":
-//   https://www.aruhihandlooms.com/api/promotions-feed
+//   https://www.sutisaree.com/api/promotions-feed
 //
 // ONLY coupons where Admin -> Coupons -> "Google Promotions" toggle is ON
 // (show_in_google_promotions = true) are included. On top of that a coupon

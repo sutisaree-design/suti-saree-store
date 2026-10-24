@@ -56,7 +56,7 @@ export default function ReferEarnPage() {
             Refer a friend, earn together
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            Every saree you love is more fun shared. Invite friends to AruhiHandlooms — when they
+            Every saree you love is more fun shared. Invite friends to Sutisaree — when they
             place their first order, you both get rewarded.
           </p>
 

@@ -3,14 +3,14 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getServerSupabase } from '@/lib/supabase-server';
 import { fetchProductsServer } from '@/lib/products-api-server';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // Google Merchant Center "Product reviews" feed (XML, schema v2.3).
 //
 // Add this URL in Merchant Center -> Data sources -> Product review sources
 // -> Add product reviews -> "Add product reviews from a file" ->
 // "Enter a link to your file":
-//   https://www.aruhihandlooms.com/api/product-reviews-feed
+//   https://www.sutisaree.com/api/product-reviews-feed
 //
 // Only APPROVED reviews that have written text are included (Google needs
 // review text; star-only ratings are skipped). Each review is linked to the
@@ -141,7 +141,7 @@ export async function GET() {
       xsi:noNamespaceSchemaLocation="http://www.google.com/shopping/reviews/schema/product/2.3/product_reviews.xsd">
   <version>2.3</version>
   <publisher>
-    <name>AruhiHandlooms</name>
+    <name>Sutisaree</name>
   </publisher>
   <reviews>${reviewXml}
   </reviews>

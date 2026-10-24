@@ -27,7 +27,7 @@ async function getContent(): Promise<PartnerPagesContent> {
 export async function generateMetadata(): Promise<Metadata> {
   const content = await getContent();
   return {
-    title: 'Reseller Registration — Become an AruhiHandlooms Reseller',
+    title: 'Reseller Registration — Become an Sutisaree Reseller',
     description: content.reseller_registration.hero_subtext,
     alternates: { canonical: '/reseller-registration' },
   };
@@ -102,14 +102,14 @@ export default async function ResellerRegistrationPage() {
         </div>
 
         <h2 className="mt-14 font-serif text-2xl font-bold text-primary sm:text-3xl">
-          Why resell with AruhiHandlooms
+          Why resell with Sutisaree
         </h2>
         <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
           {[
             'No upfront inventory — we hold and ship all stock',
             'Set and change your own markup any time',
             'Track orders and earnings from your reseller dashboard',
-            'No separate signup — use your existing AruhiHandlooms account',
+            'No separate signup — use your existing Sutisaree account',
           ].map((item) => (
             <li key={item} className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />

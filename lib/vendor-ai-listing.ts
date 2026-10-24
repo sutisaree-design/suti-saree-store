@@ -34,7 +34,7 @@ function buildVendorPrompt(input: {
   category: string;
   hasImage: boolean;
 }): string {
-  return `You are an SEO copywriter and Google Merchant Center data specialist for "AruhiHandlooms", an Indian ethnic-wear e-commerce store selling handwoven sarees, lehengas, bridal wear and kurtis.
+  return `You are an SEO copywriter and Google Merchant Center data specialist for "Sutisaree", an Indian ethnic-wear e-commerce store selling handwoven sarees, lehengas, bridal wear and kurtis.
 
 ${input.hasImage ? 'A photo of the actual product is attached — look at it closely and base the fabric, color, motifs, and craft details on what you actually see in the image.' : ''}
 
@@ -71,7 +71,7 @@ Respond with ONLY a JSON object (no markdown fences, no preamble) with these exa
     "pallu_details": "e.g. 'Same as Saree', 'Contrast Pallu', 'Printed Pallu' — leave empty string if not applicable",
     "blouse_pattern": "e.g. 'Solid', 'Printed', 'Embroidered' — leave empty string if no blouse",
     "blouse_color": "e.g. 'Black', 'Gold', 'Ivory' — leave empty string if no blouse, match the actual photo",
-    "brand": "AruhiHandlooms",
+    "brand": "Sutisaree",
     "loom_type": "e.g. 'Handloom', 'Powerloom' — your best estimate, leave empty string if unclear",
     "fit_shape": "e.g. 'Straight', 'A-Line', 'Fit and Flare' — leave empty string if not applicable",
     "length": "e.g. 'Ankle-Length', 'Saree Length (5.5 m)'",

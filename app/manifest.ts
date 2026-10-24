@@ -7,15 +7,15 @@ import type { MetadataRoute } from 'next';
 //
 // scope + start_url are both pinned to /admin on purpose: this is meant to
 // turn the admin panel into an app, not the public storefront, so a
-// customer browsing the shop never sees an "Install AruhiHandlooms Admin"
+// customer browsing the shop never sees an "Install Sutisaree Admin"
 // prompt. Icons come from app/manifest-icon-192 and .../512 (see those
 // files for why they're separate from the existing app/icon.tsx /
 // apple-icon.tsx, which serve the browser-tab favicon instead).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'AruhiHandlooms Admin',
-    short_name: 'Aruhi Admin',
-    description: 'AruhiHandlooms store admin — orders, products, and settings.',
+    name: 'Sutisaree Admin',
+    short_name: 'Sutisaree Admin',
+    description: 'Sutisaree store admin — orders, products, and settings.',
     start_url: '/admin',
     scope: '/admin',
     display: 'standalone',

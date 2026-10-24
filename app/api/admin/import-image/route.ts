@@ -119,7 +119,7 @@ export async function POST(req: Request) {
   try {
     const sourceRes = await fetch(parsedUrl.toString(), {
       // Some CDNs (e.g. Amazon) block requests with no browser-like UA.
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AruhiHandloomsBot/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SutisareeBot/1.0)' },
     });
 
     if (!sourceRes.ok) {

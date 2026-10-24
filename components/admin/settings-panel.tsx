@@ -1994,7 +1994,7 @@ export default function SettingsPanel() {
             </Label>
             <p className="text-xs text-muted-foreground">
               {mediaDeliveryForm.proxy_enabled
-                ? 'On (default): images/videos stream through aruhihandlooms.com, so your domain shows everywhere — but every byte counts against your Vercel bandwidth quota.'
+                ? 'On (default): images/videos stream through sutisaree.com, so your domain shows everywhere — but every byte counts against your Vercel bandwidth quota.'
                 : `Off: aruhihandlooms.com/media links redirect straight to whichever backend is set as preferred below (currently ${mediaStorageBackendForm?.backend === 'r2' ? 'R2 — cdn.aruhihandlooms.com' : 'Supabase'}), so Vercel stops paying the bandwidth cost. Use this if your Vercel Fast Data/Origin Transfer quota is close to running out — switch back on once it resets.`}
             </p>
           </div>
@@ -3211,7 +3211,7 @@ export default function SettingsPanel() {
                 id="email-sender-name"
                 value={emailForm.sender_name}
                 onChange={(e) => setEmailForm((f) => f && { ...f, sender_name: e.target.value })}
-                placeholder="AruhiHandlooms"
+                placeholder="Sutisaree"
               />
             </div>
             <div className="grid gap-1.5">

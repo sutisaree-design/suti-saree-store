@@ -332,7 +332,7 @@ function QcCard({
           </div>
         </div>
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-          <span className="font-medium text-amber-900">Vendor tag removed &amp; Aruhi tag attached?</span>
+          <span className="font-medium text-amber-900">Vendor tag removed &amp; Sutisaree tag attached?</span>
           <YesNo value={tagRemoved} onValue={setTagRemoved} />
         </div>
         <Textarea

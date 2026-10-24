@@ -159,7 +159,7 @@ export async function getCodConfirmPreview(
   if (!('summary' in found)) return null;
   const { summary } = found;
   const first = summary.items?.[0];
-  const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
   // WhatsApp is unreliable with the stored .webp photos, so use the same
   // JPEG re-encoding route as the payment link's preview (/api/og/pay/[orderId]).
   const imageUrl = first?.imageUrl ? `${site}/api/og/pay/${summary.id}` : null;

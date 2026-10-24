@@ -1040,7 +1040,7 @@ function ProductInfo({
           </div>
           <div className="flex shrink-0 items-start gap-4 pt-1">
             <WishlistButton productId={product.id} showLabel />
-            <ShareButton title={displayName} text={`Check out ${displayName} on Aruhi`} />
+            <ShareButton title={displayName} text={`Check out ${displayName} on Sutisaree`} />
           </div>
         </div>
         {displayRatingsCount > 0 && (

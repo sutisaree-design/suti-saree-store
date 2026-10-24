@@ -11,7 +11,7 @@ export interface StoreInfo {
 }
 
 const DEFAULT_STORE_INFO: StoreInfo = {
-  name: 'AruhiHandlooms',
+  name: 'Sutisaree',
   address: '',
   gstin: '',
   support_email: '',
@@ -60,9 +60,9 @@ export const DEFAULT_ABOUT_CONTENT: AboutContent = {
   hero_heading:
     "Handwoven ethnic wear, sold the way it's made — by hand, and by name.",
   hero_subtext:
-    'AruhiHandlooms sources sarees, lehengas and bridal wear directly from handloom weaving clusters across India, and sells them online with the same care they were woven with.',
+    'Sutisaree sources sarees, lehengas and bridal wear directly from handloom weaving clusters across India, and sells them online with the same care they were woven with.',
   story_paragraph_1:
-    "Handloom weaving is slow, skilled work, and it rarely gets sold that way online — pieces pass through several hands before reaching a customer, with little said about who actually wove them. AruhiHandlooms was built to shorten that distance: we work with weavers directly, list what's actually in stock, and stand behind every order with a real support team and real policies.",
+    "Handloom weaving is slow, skilled work, and it rarely gets sold that way online — pieces pass through several hands before reaching a customer, with little said about who actually wove them. Sutisaree was built to shorten that distance: we work with weavers directly, list what's actually in stock, and stand behind every order with a real support team and real policies.",
   story_paragraph_2:
     "We're not a print-on-demand storefront or a drop-shipped catalogue. What you see listed is what our team has checked, photographed and can ship — and if something isn't right, our refund policy and support team are there to fix it.",
   values: [
@@ -175,7 +175,7 @@ export const DEFAULT_PARTNER_PAGES_CONTENT: PartnerPagesContent = {
   vendor_registration: {
     hero_heading: 'Vendor Registration',
     hero_subtext:
-      'Supply handwoven sarees, lehengas, and ethnic wear to AruhiHandlooms. Register as a vendor, get verified, and let us handle photography, listing, and shipping for every order.',
+      'Supply handwoven sarees, lehengas, and ethnic wear to Sutisaree. Register as a vendor, get verified, and let us handle photography, listing, and shipping for every order.',
     cta_label: 'Start Vendor Registration',
     steps: [
       { title: 'Apply online', body: 'Fill in your business details, PAN, and pickup address in a short form — takes under 5 minutes.' },
@@ -184,7 +184,7 @@ export const DEFAULT_PARTNER_PAGES_CONTENT: PartnerPagesContent = {
       { title: 'Get paid', body: 'Track orders and settlements from your vendor dashboard after every fulfilled order.' },
     ],
     faqs: [
-      { q: 'How do I register as a vendor on AruhiHandlooms?', a: 'Click "Start Vendor Registration", log in or create a free account, and submit the vendor application form with your business name, PAN, and pickup address.' },
+      { q: 'How do I register as a vendor on Sutisaree?', a: 'Click "Start Vendor Registration", log in or create a free account, and submit the vendor application form with your business name, PAN, and pickup address.' },
       { q: 'Is there a fee for vendor registration?', a: 'No. Vendor registration and onboarding are free. You only need valid PAN details, and GST if applicable.' },
       { q: 'How do I log in after I become a vendor?', a: 'Approved vendors log in with the same account used to apply, via the vendor login page, and are taken straight to their vendor dashboard.' },
     ],
@@ -201,13 +201,13 @@ export const DEFAULT_PARTNER_PAGES_CONTENT: PartnerPagesContent = {
       'Start reselling and earn on every order. Set your own markup and sell our handloom collection under your name — zero inventory required.',
     cta_label: 'Start Reseller Registration',
     steps: [
-      { title: 'Create a free account', body: 'Sign up or log in with your existing AruhiHandlooms account — no separate reseller signup needed.' },
+      { title: 'Create a free account', body: 'Sign up or log in with your existing Sutisaree account — no separate reseller signup needed.' },
       { title: 'Join the reseller program', body: 'One click from your account to join — no application review, no waiting period.' },
       { title: 'Share products, zero inventory', body: 'Share our handloom catalog with your customers. We handle stock, packing, and shipping.' },
       { title: 'Set your markup, earn per order', body: 'Choose your own markup on top of our price and earn on every order placed through you.' },
     ],
     faqs: [
-      { q: 'How do I register as a reseller on AruhiHandlooms?', a: 'Log in or create a free AruhiHandlooms account, then join the reseller program from your account page in a single click — there is no separate application form.' },
+      { q: 'How do I register as a reseller on Sutisaree?', a: 'Log in or create a free Sutisaree account, then join the reseller program from your account page in a single click — there is no separate application form.' },
       { q: 'Is reseller registration free?', a: 'Yes, joining the reseller program is free and there is no inventory to buy upfront.' },
       { q: 'How much can I earn as a reseller?', a: 'You set your own markup amount on top of the base price. You earn that markup on every order placed through your reseller link.' },
     ],
@@ -215,7 +215,7 @@ export const DEFAULT_PARTNER_PAGES_CONTENT: PartnerPagesContent = {
   reseller_login: {
     hero_heading: 'Reseller Login',
     hero_subtext:
-      "Resellers log in with their regular AruhiHandlooms account. Once logged in, you'll be taken straight to your reseller dashboard to track orders and earnings.",
+      "Resellers log in with their regular Sutisaree account. Once logged in, you'll be taken straight to your reseller dashboard to track orders and earnings.",
     cta_label: 'Log In to Reseller Dashboard',
   },
 };
@@ -415,7 +415,7 @@ export async function saveRefundAutomationSettings(settings: RefundAutomationSet
 // ---------------------------------------------------------------------
 export interface MediaDeliverySettings {
   /** true = proxy streams the file through Vercel under our own domain
-   *  (default; keeps aruhihandlooms.com in front of every media URL).
+   *  (default; keeps sutisaree.com in front of every media URL).
    *  false = proxy 302-redirects straight to Supabase Storage instead,
    *  to save Vercel bandwidth quota. */
   proxy_enabled: boolean;
@@ -777,7 +777,7 @@ const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
   provider: '',
   api_key: '',
   sender_email: '',
-  sender_name: 'AruhiHandlooms',
+  sender_name: 'Sutisaree',
   zeptomail_region: 'in',
 };
 

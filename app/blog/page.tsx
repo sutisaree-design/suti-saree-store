@@ -5,7 +5,7 @@ import { fetchPublishedBlogPostsServer } from '@/lib/blog-api-server';
 import { blurDataURL } from '@/lib/utils';
 import { toPublicMediaUrl } from '@/lib/media-url';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // Without this, Next.js treats this page as fully static -- built once at
 // deploy time and never refetched -- so a post added/edited in the admin
@@ -19,16 +19,16 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms
 export const revalidate = 1800;
 
 export const metadata: Metadata = {
-  title: 'Blog | AruhiHandlooms',
+  title: 'Blog | Sutisaree',
   description:
-    'Saree draping guides, wedding outfit advice, and fabric care tips from AruhiHandlooms — everything you need to know about Indian ethnic wear.',
+    'Saree draping guides, wedding outfit advice, and fabric care tips from Sutisaree — everything you need to know about Indian ethnic wear.',
   alternates: { canonical: `${SITE_URL}/blog` },
   openGraph: {
-    title: 'Blog | AruhiHandlooms',
+    title: 'Blog | Sutisaree',
     description:
-      'Saree draping guides, wedding outfit advice, and fabric care tips from AruhiHandlooms.',
+      'Saree draping guides, wedding outfit advice, and fabric care tips from Sutisaree.',
     url: `${SITE_URL}/blog`,
-    siteName: 'AruhiHandlooms',
+    siteName: 'Sutisaree',
     type: 'website',
   },
 };
@@ -43,7 +43,7 @@ export default async function BlogIndexPage() {
           Guides & Stories
         </p>
         <h1 className="mt-1 font-serif text-3xl font-bold text-primary sm:text-4xl">
-          The Aruhi Journal
+          The Sutisaree Journal
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Draping guides, styling advice, and fabric care tips — everything to help you shop and

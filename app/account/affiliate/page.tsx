@@ -241,7 +241,7 @@ export default function AffiliatePage() {
         </p>
         <div className="mt-2 flex max-w-lg gap-2">
           <Input
-            placeholder="https://www.aruhihandlooms.com/product/kanjivaram-silk-saree"
+            placeholder="https://www.sutisaree.com/product/kanjivaram-silk-saree"
             value={productUrlInput}
             onChange={(e) => setProductUrlInput(e.target.value)}
           />

@@ -23,7 +23,7 @@ const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
   provider: '',
   api_key: '',
   sender_email: '',
-  sender_name: 'AruhiHandlooms',
+  sender_name: 'Sutisaree',
   zeptomail_region: 'in',
 };
 

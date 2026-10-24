@@ -15,7 +15,7 @@ import { toPublicMediaUrl, toPublicMediaUrls } from '@/lib/media-url';
 // instead of relying on the file-convention sitemap, this route builds the
 // full XML (including the image/video namespaces and tags) by hand.
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // Without a `revalidate` value, Next.js treats this route as static and
 // bakes it ONCE at build/deploy time -- so a new product/variant added in
@@ -62,7 +62,7 @@ async function fetchAllRows<T>(
 // absolute Supabase Storage URLs) into absolute own-domain URLs, since
 // Google's image sitemap extension requires full URLs. Routing Supabase
 // URLs through toPublicMediaUrl means the sitemap always advertises
-// aruhihandlooms.com URLs, not the storage provider's host -- see
+// sutisaree.com URLs, not the storage provider's host -- see
 // lib/media-url.ts for why.
 function toAbsoluteImageUrls(images: string[] | null | undefined): string[] {
   if (!images || images.length === 0) return [];

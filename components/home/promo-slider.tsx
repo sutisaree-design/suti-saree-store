@@ -101,7 +101,7 @@ export default function PromoSlider() {
                 key: 'loyalty',
                 href: '/account/loyalty',
                 icon: Coins,
-                eyebrow: 'Aruhi Rewards',
+                eyebrow: 'Sutisaree Rewards',
                 title: `Earn ${loyalty.points_per_100_rupees} Points on Every ₹100`,
                 desc: `Points convert straight to rupees at checkout — redeem ${loyalty.min_redeem_points}+ points anytime.`,
                 cta: 'View My Points',

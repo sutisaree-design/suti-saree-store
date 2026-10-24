@@ -211,9 +211,9 @@ export async function generateInvoicePdf(
   });
   y -= 14;
 
-  // ---- Header: two-tone wordmark (matches the site header's "Aruhi" +
+  // ---- Header: two-tone wordmark (matches the site header's "Sutisaree" +
   // "Handlooms" styling in components/header.tsx) + tax invoice badge ----
-  const brandName = store.name || 'AruhiHandlooms';
+  const brandName = store.name || 'Sutisaree';
   const knownSuffix = ['Handlooms', 'Handloom'].find((s) => brandName.toLowerCase().endsWith(s.toLowerCase()));
   const brandFirst = knownSuffix ? brandName.slice(0, brandName.length - knownSuffix.length) : brandName;
   const brandSecond = knownSuffix ? brandName.slice(brandName.length - knownSuffix.length) : '';

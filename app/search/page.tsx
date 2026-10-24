@@ -16,8 +16,8 @@ export const revalidate = 1800;
 // matching), just under a URL that says "this is a search", not "this is
 // the catalog with a filter applied".
 export const metadata: Metadata = {
-  title: 'Search Results | AruhiHandlooms',
-  description: 'Search AruhiHandlooms for sarees, lehengas, kurtis and other handwoven ethnic wear.',
+  title: 'Search Results | Sutisaree',
+  description: 'Search Sutisaree for sarees, lehengas, kurtis and other handwoven ethnic wear.',
   robots: {
     // Individual search-result pages (?q=...) aren't useful landing pages
     // for Google to index -- same treatment /shop?q= implicitly got before,

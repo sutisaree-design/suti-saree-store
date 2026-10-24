@@ -140,7 +140,7 @@ export interface Product {
    */
   all_images?: string[];
   /** The vendor's public storefront collection this product belongs to --
-   *  e.g. "Aruhi Weaves's Collection" at /collection/aruhi-weaves-a1b2c3.
+   *  e.g. "Sutisaree Weaves's Collection" at /collection/aruhi-weaves-a1b2c3.
    *  Null/undefined if the product has no approved vendor. Shown next to
    *  the category label on the product card and PDP, both clickable. */
   collection?: { name: string; slug: string } | null;

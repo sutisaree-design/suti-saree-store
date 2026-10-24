@@ -37,7 +37,7 @@ export type StorageBucket = 'product-images' | 'product-videos' | 'review-images
 
 // Canonical public base — the only host that should ever appear in the DB
 // or be returned to callers. Never expose supabase.co or cdn.* directly.
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
 
 let r2Client: S3Client | null = null;
 

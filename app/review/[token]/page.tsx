@@ -590,7 +590,7 @@ function BrandHeader() {
   return (
     <div className="text-center">
       <div className="font-serif text-2xl font-bold">
-        <span className="text-primary">Aruhi</span>
+        <span className="text-primary">Sutisaree</span>
         <span className="text-secondary">Handlooms</span>
       </div>
       <div className="mx-auto mt-1.5 h-px w-12 bg-secondary/60" />

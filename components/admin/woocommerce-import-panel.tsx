@@ -386,8 +386,8 @@ export default function WooCommerceImportPanel() {
               ? `New In ${categoryFilter}`
               : 'Fresh Off The Loom — New Arrivals'
             : templateId === 'introduction'
-              ? `Introducing ${'AruhiHandlooms'}`
-              : `A Note From ${'AruhiHandlooms'}`;
+              ? `Introducing ${'Sutisaree'}`
+              : `A Note From ${'Sutisaree'}`;
       const html = buildPremiumCampaignHtml({
         templateId,
         headline,

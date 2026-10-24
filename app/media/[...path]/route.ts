@@ -3,7 +3,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 
 // Public media proxy: serves storage files under our own domain, so every
 // place that surfaces a media URL externally — sitemap, Merchant Center /
-// Pinterest feeds, JSON-LD video/image schema — shows aruhihandlooms.com
+// Pinterest feeds, JSON-LD video/image schema — shows sutisaree.com
 // instead of the storage provider's host.
 //
 // DUAL-WRITE UPDATE (feature/media-dual-write-toggle)

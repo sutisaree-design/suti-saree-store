@@ -1082,7 +1082,7 @@ export default function CheckoutPage() {
       const options = {
         key: keyId,
         order_id: razorpayOrderId,
-        name: 'AruhiHandlooms',
+        name: 'Sutisaree',
         description: 'Handwoven Ethnic Wear Purchase',
         image: 'https://images.pexels.com/photos/1191349/pexels-photo-1191349.jpeg?auto=compress&cs=tinysrgb&w=200',
         prefill: {

@@ -901,7 +901,7 @@ export default function OrdersPanel() {
 // publishes og:title/description/image (photo served from our own domain, see
 // app/checkout/resume/[id]/page.tsx and app/api/og/pay/[id]/route.ts). Keep
 // the payment link as the ONLY link in this message so its card is the one shown.
-const STORE_NAME = 'AruhiHandlooms';
+const STORE_NAME = 'Sutisaree';
 // Made-to-order processing time quoted to the customer (before dispatch).
 const PROCESSING_TIME = '4-7 days';
 

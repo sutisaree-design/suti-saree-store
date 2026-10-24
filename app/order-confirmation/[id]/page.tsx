@@ -432,7 +432,7 @@ export default async function OrderConfirmationPage({ params }: { params: { id: 
             <h3 className="font-serif text-sm font-semibold text-primary">Refer &amp; Earn</h3>
           </div>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Invite a friend to AruhiHandlooms — you'll earn{' '}
+            Invite a friend to Sutisaree — you'll earn{' '}
             <strong className="text-foreground">{referralSettings.referrer_reward_points} points</strong>{' '}
             and they'll get{' '}
             <strong className="text-foreground">{referralSettings.referred_reward_points} points</strong>{' '}

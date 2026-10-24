@@ -83,7 +83,7 @@ export async function generateVendorPickupSlipPdf(
   };
 
   // ---- Header ----
-  draw(store.name || 'AruhiHandlooms', margin, y, { size: 18, f: bold, color: primary });
+  draw(store.name || 'Sutisaree', margin, y, { size: 18, f: bold, color: primary });
   y -= 20;
   draw('VENDOR PICKUP SLIP', margin, y, { size: 11, f: bold, color: muted });
 

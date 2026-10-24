@@ -253,7 +253,7 @@ export default function HomeClient({
                       {thumb ? (
                         <Image
                           src={thumb}
-                          alt={`${c.name} - handwoven Indian ethnic wear collection at AruhiHandlooms`}
+                          alt={`${c.name} - handwoven Indian ethnic wear collection at Sutisaree`}
                           fill
                           sizes="80px"
                           className="object-cover"
@@ -305,7 +305,7 @@ export default function HomeClient({
                   {c.thumbnail ? (
                     <Image
                       src={toPublicMediaUrl(c.thumbnail) ?? c.thumbnail}
-                      alt={`${c.name} - curated collection at AruhiHandlooms`}
+                      alt={`${c.name} - curated collection at Sutisaree`}
                       fill
                       sizes="80px"
                       className="object-cover"

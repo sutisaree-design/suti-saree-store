@@ -21,7 +21,7 @@ import BlogReviewQuote from '@/components/blog/blog-review-quote';
 import ProductCard from '@/components/product-card';
 import { toPublicMediaUrl } from '@/lib/media-url';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // See the matching comment in app/blog/page.tsx -- same reasoning applies
 // here: without this, a newly-published or edited post's own page would
@@ -140,11 +140,11 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const post = await fetchPublishedBlogPostBySlugServer(params.slug);
   if (!post) {
-    return { title: 'Post not found | AruhiHandlooms', robots: { index: false, follow: true } };
+    return { title: 'Post not found | Sutisaree', robots: { index: false, follow: true } };
   }
 
   const url = `${SITE_URL}/blog/${post.slug}`;
-  const title = `${post.title} | AruhiHandlooms`;
+  const title = `${post.title} | Sutisaree`;
   const coverImage =
     toPublicMediaUrl(post.cover_image) ||
     post.cover_image ||
@@ -159,7 +159,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       title,
       description: post.excerpt,
       url,
-      siteName: 'AruhiHandlooms',
+      siteName: 'Sutisaree',
       type: 'article',
       images: [{ url: coverImage, width: 1200, height: 630, alt: post.title }],
       publishedTime: post.published_at,
@@ -256,8 +256,8 @@ export default async function BlogPostPage({ params }: Params) {
     image: coverImage,
     datePublished: post.published_at,
     dateModified: post.updated_at || post.published_at,
-    author: { '@type': 'Organization', name: 'AruhiHandlooms' },
-    publisher: { '@type': 'Organization', name: 'AruhiHandlooms' },
+    author: { '@type': 'Organization', name: 'Sutisaree' },
+    publisher: { '@type': 'Organization', name: 'Sutisaree' },
     mainEntityOfPage: url,
   };
 

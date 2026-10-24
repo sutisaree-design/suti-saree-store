@@ -24,7 +24,7 @@ export const revalidate = 1800;
 // revalidatePath('/shop').
 
 export const metadata: Metadata = {
-  title: 'Shop All Sarees & Ethnic Wear | AruhiHandlooms',
+  title: 'Shop All Sarees & Ethnic Wear | Sutisaree',
   description:
     'Browse our full collection of sarees and ethnic wear, sourced directly from master weavers across India.',
 };

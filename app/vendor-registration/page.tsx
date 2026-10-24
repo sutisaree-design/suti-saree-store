@@ -34,7 +34,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: 'Vendor Registration — Become a Supplying Vendor',
     description:
       content.vendor_registration.hero_subtext ||
-      'Register as a vendor with AruhiHandlooms and supply handloom sarees, lehengas and ethnic wear.',
+      'Register as a vendor with Sutisaree and supply handloom sarees, lehengas and ethnic wear.',
     alternates: { canonical: '/vendor-registration' },
   };
 }
@@ -115,7 +115,7 @@ export default async function VendorRegistrationPage() {
             'Business or owner name and phone number',
             'PAN number (GST optional, but recommended)',
             'A pickup address for courier collection',
-            'A free AruhiHandlooms account to submit and track your application',
+            'A free Sutisaree account to submit and track your application',
           ].map((item) => (
             <li key={item} className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />

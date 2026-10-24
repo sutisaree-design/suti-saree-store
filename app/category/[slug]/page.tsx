@@ -11,7 +11,7 @@ import CategoryToolbarGrid from '@/components/category/category-toolbar-grid';
 import { safeJsonLd } from '@/lib/json-ld';
 import { expandProductVariants } from '@/lib/expand-product-variants';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // This page uses generateStaticParams(), so without a `revalidate` value
 // Next.js caches it once at build time and NEVER regenerates it (revalidate:
@@ -39,7 +39,7 @@ type Params = { params: { slug: string } };
  */
 function fallbackIntro(name: string): string {
   return (
-    `Explore our handpicked ${name} collection at AruhiHandlooms. Every piece is sourced ` +
+    `Explore our handpicked ${name} collection at Sutisaree. Every piece is sourced ` +
     `directly from master weavers across India, blending traditional craftsmanship with ` +
     `designs made for everyday elegance and special occasions alike. Whether you're shopping ` +
     `for a wedding, festival, or gifting, our ${name} collection is curated for quality, ` +
@@ -57,14 +57,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
   if (!category) {
     return {
-      title: 'Category not found | AruhiHandlooms',
+      title: 'Category not found | Sutisaree',
       robots: { index: false, follow: true },
     };
   }
 
   const description = (category.description || fallbackIntro(category.name)).slice(0, 160);
   const url = `${SITE_URL}/category/${category.slug}`;
-  const title = `${category.name} | AruhiHandlooms`;
+  const title = `${category.name} | Sutisaree`;
 
   // An empty category ("No products yet") is thin content -- indexing it
   // risks a low-quality signal on the whole domain, and it's not a page
@@ -82,7 +82,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       title,
       description,
       url,
-      siteName: 'AruhiHandlooms',
+      siteName: 'Sutisaree',
       type: 'website',
     },
     twitter: {

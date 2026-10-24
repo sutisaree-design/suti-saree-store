@@ -1,7 +1,7 @@
 // app/rss.xml/route.ts
 //
 // Pinterest-compatible RSS/product feed for auto-publish + shopping (price) tags.
-// Feed URL: https://www.aruhihandlooms.com/rss.xml
+// Feed URL: https://www.sutisaree.com/rss.xml
 //
 // Uses the project's existing fetchProductsServer() (lib/products-api-server.ts),
 // the same helper sitemap.ts uses, so this stays in sync with your real Supabase
@@ -27,7 +27,7 @@ import { toPublicMediaUrl } from "@/lib/media-url";
 
 export const dynamic = "force-dynamic"; // always fetch fresh data on each request
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.aruhihandlooms.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.sutisaree.com";
 
 function escapeXml(unsafe: string = ""): string {
   return unsafe
@@ -216,9 +216,9 @@ export async function GET() {
   xmlns:g="http://base.google.com/ns/1.0"
   xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
-    <title>AruhiHandlooms</title>
+    <title>Sutisaree</title>
     <link>${SITE_URL}</link>
-    <description>Latest products from AruhiHandlooms</description>${items}
+    <description>Latest products from Sutisaree</description>${items}
   </channel>
 </rss>`;
 

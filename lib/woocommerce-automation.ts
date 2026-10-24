@@ -69,8 +69,8 @@ export const DEFAULT_WOOCOMMERCE_DRIP_SETTINGS: WooCommerceDripSettings = {
   sourceStoreName: '',
   welcome: {
     templateId: 'introduction',
-    subject: 'Introducing AruhiHandlooms',
-    headline: 'Introducing AruhiHandlooms',
+    subject: 'Introducing Sutisaree',
+    headline: 'Introducing Sutisaree',
     subheadline: '',
   },
   followup: {

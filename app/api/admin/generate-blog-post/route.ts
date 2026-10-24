@@ -168,7 +168,7 @@ function buildPrompt(topic: string, extraKeywords: string, categoryNames: string
   const sectionRange = strict ? '2 to 3' : '3 to 5';
   const paraRange = strict ? '2 (max 3 sentences each)' : '2 to 3 (3-5 sentences each)';
   const faqRange = strict ? '2 to 3' : '3 to 4';
-  return `You are an SEO content writer for "AruhiHandlooms", an Indian ethnic-wear e-commerce store selling handwoven sarees, lehengas, bridal wear and kurtis. Their existing blog targets real search-intent, long-tail keywords (often Hinglish) in a warm, boutique-style, no-fuss voice — practical how-to and guide content, not generic marketing fluff.
+  return `You are an SEO content writer for "Sutisaree", an Indian ethnic-wear e-commerce store selling handwoven sarees, lehengas, bridal wear and kurtis. Their existing blog targets real search-intent, long-tail keywords (often Hinglish) in a warm, boutique-style, no-fuss voice — practical how-to and guide content, not generic marketing fluff.
 
 Write a full blog post for this topic: "${topic}"
 ${extraKeywords ? `Additional keywords/context to weave in naturally: ${extraKeywords}` : ''}

@@ -64,7 +64,7 @@ export default function GiftCardsPage() {
       const options = {
         key: keyId,
         order_id: razorpayOrderId,
-        name: 'AruhiHandlooms',
+        name: 'Sutisaree',
         description: 'Gift Card Purchase',
         image: 'https://images.pexels.com/photos/1191349/pexels-photo-1191349.jpeg?auto=compress&cs=tinysrgb&w=200',
         prefill: {

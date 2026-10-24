@@ -82,7 +82,7 @@ export function wrapCampaignLinksForClickTracking(html: string, sendId: string, 
 }
 
 const BRAND_COLOR = '#7c3a1d';
-const SITE_NAME = 'AruhiHandlooms';
+const SITE_NAME = 'Sutisaree';
 
 export interface CampaignProduct {
   id?: string;
@@ -175,7 +175,7 @@ function unsubscribeFooter() {
     </tr>`;
 }
 
-// Matches the site's actual logo styling (components/header.tsx): "Aruhi" in
+// Matches the site's actual logo styling (components/header.tsx): "Sutisaree" in
 // gold/amber, "Handlooms" in maroon, serif, on a light background — not a
 // solid brown banner with plain white caps text, which didn't match the
 // real site at all.
@@ -187,7 +187,7 @@ function header() {
     <tr>
       <td style="background:#fffaf5; padding: 22px 24px; text-align: center; border-bottom: 1px solid #eee2d8;">
         <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight: bold; letter-spacing: 0.01em;">
-          <span style="color:${LOGO_GOLD};">Aruhi</span><span style="color:${LOGO_MAROON};">Handlooms</span>
+          <span style="color:${LOGO_GOLD};">Sutisaree</span><span style="color:${LOGO_MAROON};">Handlooms</span>
         </span>
       </td>
     </tr>`;

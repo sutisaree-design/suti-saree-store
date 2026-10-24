@@ -285,9 +285,9 @@ function LegalPagesTab() {
 
       {(activeSlug === 'privacy-policy' || activeSlug === 'terms-conditions') && (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs">
-          <p className="font-medium text-foreground">Ready-made AruhiHandlooms template</p>
+          <p className="font-medium text-foreground">Ready-made Sutisaree template</p>
           <p className="mt-1 text-muted-foreground">
-            Drops in a complete, pre-written {LEGAL_PAGE_TITLES[activeSlug]} for aruhihandlooms.com
+            Drops in a complete, pre-written {LEGAL_PAGE_TITLES[activeSlug]} for sutisaree.com
             (contact email, phone number, and registered address already filled in). Review it and
             adjust anything specific to your business before saving.
           </p>
@@ -657,7 +657,7 @@ function SeoTab() {
           id="seo-title"
           value={seo.site_title}
           onChange={(e) => setSeo({ ...seo, site_title: e.target.value })}
-          placeholder="AruhiHandlooms — Handwoven Indian Ethnic Wear & Sarees"
+          placeholder="Sutisaree — Handwoven Indian Ethnic Wear & Sarees"
         />
         <p className="text-xs text-muted-foreground">
           Shown in Google search results and the browser tab on the homepage.

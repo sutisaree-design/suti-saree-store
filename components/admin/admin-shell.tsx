@@ -211,7 +211,7 @@ export default function AdminShell({ active, onChange, children }: AdminShellPro
           S
         </div>
         <div className="min-w-0">
-          <p className="truncate font-serif text-lg font-bold leading-tight text-primary">AruhiHandlooms</p>
+          <p className="truncate font-serif text-lg font-bold leading-tight text-primary">Sutisaree</p>
           <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Admin</p>
         </div>
       </div>

@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'About Us',
   description:
-    'AruhiHandlooms sources and sells handwoven ethnic wear directly from weaving clusters across India — who we are, how we work, and how to reach us.',
+    'Sutisaree sources and sells handwoven ethnic wear directly from weaving clusters across India — who we are, how we work, and how to reach us.',
   alternates: { canonical: '/about' },
 };
 
@@ -59,7 +59,7 @@ export default async function AboutPage() {
   const orgJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Organization',
-    name: store.name || 'AruhiHandlooms',
+    name: store.name || 'Sutisaree',
     url: process.env.NEXT_PUBLIC_SITE_URL || undefined,
     ...(store.address ? { address: store.address } : {}),
     ...(store.support_email ? { email: store.support_email } : {}),

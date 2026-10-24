@@ -3,7 +3,7 @@ import { safeJsonLd } from '@/lib/json-ld';
 import { fetchHomeData } from '@/lib/home-data-server';
 import HomeClient from './home-client';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
 
 // Homepage now fetches products/categories/collections server-side (see
 // fetchHomeData below) instead of the client re-fetching them fresh on
@@ -29,7 +29,7 @@ interface HomeSeoData {
 // needed if the shop rebrands.
 async function getHomeSeoData(): Promise<HomeSeoData> {
   const fallback: HomeSeoData = {
-    name: 'AruhiHandlooms',
+    name: 'Sutisaree',
     description:
       'Handpicked sarees and ethnic wear from master weavers across India.',
     email: '',

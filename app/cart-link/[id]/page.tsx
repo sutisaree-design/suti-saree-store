@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const base: Metadata = { title: 'Your cart', robots: { index: false, follow: false } };
   try {
     if (!/^[0-9a-f-]{36}$/i.test(params.id)) return base;
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.aruhihandlooms.com').replace(/\/$/, '');
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
     const { data: cart } = await getSupabaseAdmin()
       .from('abandoned_carts')
       .select('id, items, cart_value')
@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     const more = items.length > 1 ? ` +${items.length - 1} more` : '';
     const hasImage = items.some((it) => it?.image_url || it?.image || it?.images?.[0]);
 
-    const title = `${itemName}${more} is waiting in your cart · Aruhi Handlooms`;
+    const title = `${itemName}${more} is waiting in your cart · Sutisaree`;
     const description = `${cart.cart_value ? `Cart value ${formatINR(cart.cart_value)} · ` : ''}Tap to complete your order`;
 
     return {
@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
         title,
         description,
         url: `${siteUrl}/cart-link/${cart.id}`,
-        siteName: 'Aruhi Handlooms',
+        siteName: 'Sutisaree',
         type: 'website',
         ...(hasImage
           ? { images: [{ url: `${siteUrl}/api/og/cart/${cart.id}`, width: 800, height: 800, alt: itemName }] }
