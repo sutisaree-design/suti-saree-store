@@ -87,7 +87,7 @@ export async function buildProductMetadata(slug: string): Promise<Metadata> {
     variantSeoFallback?.metaDescription ||
     product.description ||
     `Buy ${displayName} - ${product.fabric} from ${product.origin}. Handwoven ethnic wear from Sutisaree.`;
-  const url = `${SITE_URL}/product/${slug}`;
+  const url = `${SITE_URL}/product/${slug}/`;
   // Rewrites Supabase Storage URLs to sutisaree.com (see
   // lib/media-url.ts) so the OG/Twitter image -- what Google/social
   // crawlers actually fetch and cite -- shows our own domain.

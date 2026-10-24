@@ -6,6 +6,7 @@ import { fetchPopularityRankServer } from '@/lib/popularity-rank-server';
 import { fetchTopVariantMapServer, toJSON } from '@/lib/top-variant-server';
 import { getBlurPreviews } from '@/lib/blur-preview';
 import { toPublicMediaUrl } from '@/lib/media-url';
+import { categoryPath } from '@/lib/category-url';
 import ViewItemListTracker from '@/components/analytics/view-item-list-tracker';
 import CategoryToolbarGrid from '@/components/category/category-toolbar-grid';
 import { safeJsonLd } from '@/lib/json-ld';
@@ -63,7 +64,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   }
 
   const description = (category.description || fallbackIntro(category.name)).slice(0, 160);
-  const url = `${SITE_URL}/category/${category.slug}`;
+  const url = `${SITE_URL}${categoryPath(category)}`;
   const title = `${category.name} | Sutisaree`;
 
   // An empty category ("No products yet") is thin content -- indexing it
@@ -132,7 +133,7 @@ export default async function CategoryPage({ params }: Params) {
   // showed as "1 product" here while the grid rendered 10 cards for it.
   const displayCount = expandProductVariants(categoryProducts).length;
   const intro = category.description || fallbackIntro(category.name);
-  const url = `${SITE_URL}/category/${category.slug}`;
+  const url = `${SITE_URL}${categoryPath(category)}`;
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -147,7 +148,7 @@ export default async function CategoryPage({ params }: Params) {
             itemListElement: categoryProducts.slice(0, 24).map((p, i) => ({
               '@type': 'ListItem',
               position: i + 1,
-              url: `${SITE_URL}/product/${p.slug}`,
+              url: `${SITE_URL}/product/${p.slug}/`,
             })),
           },
         }

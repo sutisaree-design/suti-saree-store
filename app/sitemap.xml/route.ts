@@ -4,6 +4,7 @@ import { ProductRow, CategoryRow } from '@/lib/types';
 import { LEGAL_PAGE_TITLES } from '@/lib/marketing-api';
 import { fetchPublishedBlogPostsServer } from '@/lib/blog-api-server';
 import { toPublicMediaUrl, toPublicMediaUrls } from '@/lib/media-url';
+import { categoryPath } from '@/lib/category-url';
 
 // This route replaces the app/sitemap.ts file-convention sitemap. The
 // installed Next.js version's built-in sitemap XML serializer
@@ -252,7 +253,7 @@ async function buildSitemapEntries(): Promise<SitemapEntry[]> {
   const categoryPages: SitemapEntry[] = categories
     .filter((c) => namesWithProducts.has(c.name))
     .map((c) => ({
-      url: `${SITE_URL}/category/${c.slug}`,
+      url: `${SITE_URL}${categoryPath(c)}`,
       lastModified: new Date(),
       changeFrequency: 'weekly' as const,
       priority: 0.7,
@@ -279,7 +280,7 @@ async function buildSitemapEntries(): Promise<SitemapEntry[]> {
     const images = toAbsoluteImageUrls(p.images);
     const videos = buildVideoEntry(p.video_url, p.name, p.description, p.images || []);
     return {
-      url: `${SITE_URL}/product/${p.slug}`,
+      url: `${SITE_URL}/product/${p.slug}/`,
       lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
       changeFrequency: 'weekly' as const,
       priority: 0.8,
@@ -301,7 +302,7 @@ async function buildSitemapEntries(): Promise<SitemapEntry[]> {
       v.images || []
     );
     return {
-      url: `${SITE_URL}/product/${v.slug}`,
+      url: `${SITE_URL}/product/${v.slug}/`,
       lastModified: v.created_at ? new Date(v.created_at) : new Date(),
       changeFrequency: 'weekly' as const,
       priority: 0.6,

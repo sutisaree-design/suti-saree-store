@@ -181,6 +181,8 @@ export interface CategoryRow {
   name: string;
   slug: string;
   description?: string | null;
+  woo_path?: string | null;
+  woo_path?: string | null;
 }
 
 /** Managed from Admin > Blog (`blog_posts` table). Public pages only ever
