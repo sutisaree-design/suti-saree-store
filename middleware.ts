@@ -11,7 +11,7 @@ export async function middleware(req: NextRequest) {
 
   // ---------- Admin routes: unchanged existing token-based guard ----------
   if (pathname.startsWith('/admin')) {
-    if (pathname === '/admin/login') return NextResponse.next();
+    if (pathname === '/admin/login' || pathname === '/admin/login/') return NextResponse.next();
 
     const cookie = req.cookies.get(ADMIN_SESSION_COOKIE);
     const token = cookie?.value ?? null;
