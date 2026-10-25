@@ -249,3 +249,40 @@ export async function fetchCategoriesServer(): Promise<CategoryRow[]> {
   if (error) throw error;
   return (data ?? []) as CategoryRow[];
 }
+
+export interface TagRow {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export async function fetchTagBySlugServer(slug: string): Promise<TagRow | null> {
+  const supabase = getServerSupabase();
+  const { data, error } = await supabase
+    .from('tags')
+    .select('id, name, slug')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as TagRow | null) ?? null;
+}
+
+export async function fetchAllTagsServer(): Promise<TagRow[]> {
+  const supabase = getServerSupabase();
+  const { data, error } = await supabase
+    .from('tags')
+    .select('id, name, slug')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as TagRow[];
+}
+
+export async function fetchTagProductIdsServer(tagId: string): Promise<string[]> {
+  const supabase = getServerSupabase();
+  const { data, error } = await supabase
+    .from('product_tags')
+    .select('product_id')
+    .eq('tag_id', tagId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.product_id as string);
+}

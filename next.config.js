@@ -7,7 +7,7 @@ const nextConfig = {
   // routing layer lets the product page be cached.
   async rewrites() {
     return [
-      { source: '/product-category/:parent*/:slug', destination: '/category/:slug' },
+      { source: '/product-category/:parent*/:slug', destination: '/category/:slug' },      { source: '/product-tag/:slug', destination: '/tag/:slug' },
       {
         // Merchant-feed links (/product/x?size=XL) need server-rendered
         // JSON-LD with that size's price; serve them from a dynamic twin
