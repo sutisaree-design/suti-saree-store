@@ -39,6 +39,14 @@ function cn(c: string): string {
   return (c || '').toLowerCase().trim().replace(/\s+/g, '-');
 }
 
+function niceColor(c: string): string {
+  return (c || '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b([a-z])/g, (m) => m.toUpperCase());
+}
+
 export async function GET() {
   const sb = getServerSupabase();
   const { data: mrow } = await sb.from('settings').select('value').eq('key', 'feed_idmap').maybeSingle();
@@ -49,7 +57,7 @@ export async function GET() {
   const products: any[] = (await fetchProductsServer()) as any[];
   const { data: vrows } = await sb
     .from('product_variants')
-    .select('product_id,color,slug,images,price_override')
+    .select('product_id,color,slug,images,price_override,sku')
     .limit(5000);
   const byProduct = new Map<string, any[]>();
   for (const v of (vrows || []) as any[]) {
@@ -68,7 +76,7 @@ export async function GET() {
     const mrp = Number(p.mrp || 0);
     const hasSale = mrp > price;
     const imgs: string[] = (toPublicMediaUrls(o.images || []) as string[]).map(absUrl).filter(Boolean);
-    const mpn = String(h.mpn || '').trim();
+    const mpn = String(o.mpn || h.mpn || '').trim();
     const gtin = String(h.gtin || '').replace(/\D/g, '');
     const gtinOk = gtin.length >= 8 && gtin.length <= 14;
     const sizeType = String(h.size_type || '').toLowerCase();
@@ -82,8 +90,9 @@ export async function GET() {
     lines.push('<description>' + esc(plain(p.description || p.name) || p.name) + '</description>');
     t('item_group_id', o.group);
     lines.push('<link>' + esc(o.link) + '</link>');
+    t('canonical_link', o.canonical || o.link);
     t('product_type', p.category);
-    t('google_product_category', resolveGoogleProductCategory(p.category, p.name));
+    t('google_product_category', 'Apparel & Accessories > Clothing > Traditional & Ceremonial Clothing > Saris & Lehengas');
     t('image_link', imgs[0] || '');
     for (const extra of imgs.slice(1, 11)) t('additional_image_link', extra);
     t('availability', p.inStock === false ? 'out_of_stock' : 'in_stock');
@@ -106,7 +115,7 @@ export async function GET() {
 
   for (const p of products) {
     const pid = pmap[p.slug] || p.sku || p.slug;
-    const pcolor = (p.colors || []).slice(0, 3).join(' ') || 'Multicolor';
+    const pcolor = niceColor((p.colors || []).slice(0, 3).join(' ')) || 'Multicolor';
     item({
       id: pid,
       group: pid,
@@ -126,11 +135,13 @@ export async function GET() {
       item({
         id: vid,
         group: pid,
-        title: p.name + ' - ' + v.color,
+        title: p.name + ' - ' + niceColor(v.color),
         link: SITE_URL + '/product/' + p.slug + '/?attribute_pa_color=' + encodeURIComponent(cn(v.color)),
         images: v.images && v.images.length > 0 ? v.images : p.images || [],
         price: v.price_override ?? p.price,
-        color: v.color,
+        color: niceColor(v.color),
+        canonical: SITE_URL + '/product/' + p.slug + '/',
+        mpn: String(v.sku || '').trim(),
         product: p,
       });
     }
