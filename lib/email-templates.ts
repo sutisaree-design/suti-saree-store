@@ -1478,7 +1478,7 @@ export function codToPrepaidRequestEmail(order: {
 
     <p style="text-align:center; font-size:12px; color:#9a8f87; margin: 14px 0 0; line-height:1.6;">
       Your payment is fully protected — 7-day returns and a full refund should anything go amiss
-      (<a href="${siteUrl}/legal/refund-policy" style="color:${BRAND_COLOR};">our policy</a>).<br/>
+      (<a href="${siteUrl}/returns-exchange/" style="color:${BRAND_COLOR};">our policy</a>).<br/>
       With gratitude, <strong style="color:${BRAND_COLOR};">Team ${SITE_NAME}</strong>
     </p>
     ${pixel}

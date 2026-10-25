@@ -107,7 +107,7 @@ export default async function AboutPage() {
           <p>
             {about.story_paragraph_2}{' '}
             See our{' '}
-            <Link href="/legal/refund-policy" className="text-primary underline underline-offset-2 hover:text-secondary">
+            <Link href="/returns-exchange/" className="text-primary underline underline-offset-2 hover:text-secondary">
               refund policy
             </Link>{' '}
             or{' '}
@@ -185,11 +185,11 @@ export default async function AboutPage() {
           </h2>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
             In line with our{' '}
-            <Link href="/legal/terms-conditions" className="text-primary underline underline-offset-2 hover:text-secondary">
+            <Link href="/terms-and-conditions/" className="text-primary underline underline-offset-2 hover:text-secondary">
               Terms &amp; Conditions
             </Link>{' '}
             and{' '}
-            <Link href="/legal/privacy-policy" className="text-primary underline underline-offset-2 hover:text-secondary">
+            <Link href="/privacy-policy/" className="text-primary underline underline-offset-2 hover:text-secondary">
               Privacy Policy
             </Link>
             , here's how to verify or reach us directly.

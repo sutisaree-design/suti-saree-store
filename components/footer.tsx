@@ -75,10 +75,10 @@ export default function Footer() {
             <li><Link href="/about" className="hover:text-secondary">About Us</Link></li>
             <li><Link href="/contact" className="hover:text-secondary">Contact Us</Link></li>
             {/* Admin link intentionally omitted for security */}
-            <li><Link href="/legal/shipping-policy" className="hover:text-secondary">Shipping & Returns</Link></li>
-            <li><Link href="/legal/refund-policy" className="hover:text-secondary">Refund & Cancellation</Link></li>
-            <li><Link href="/legal/privacy-policy" className="hover:text-secondary">Privacy Policy</Link></li>
-            <li><Link href="/legal/terms-conditions" className="hover:text-secondary">Terms & Conditions</Link></li>
+            <li><Link href="/shipping-delivery-information/" className="hover:text-secondary">Shipping & Returns</Link></li>
+            <li><Link href="/returns-exchange/" className="hover:text-secondary">Refund & Cancellation</Link></li>
+            <li><Link href="/privacy-policy/" className="hover:text-secondary">Privacy Policy</Link></li>
+            <li><Link href="/terms-and-conditions/" className="hover:text-secondary">Terms & Conditions</Link></li>
           </ul>
         </div>
         <div>

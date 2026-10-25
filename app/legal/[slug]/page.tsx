@@ -38,7 +38,7 @@ export async function generateMetadata({
   return {
     title,
     description: `${title} for Sutisaree — read our policy before you shop.`,
-    alternates: { canonical: `/legal/${slug}` },
+    alternates: { canonical: `/${({"privacy-policy":"privacy-policy","terms-conditions":"terms-and-conditions","shipping-policy":"shipping-delivery-information","refund-policy":"returns-exchange"} as Record<string,string>)[slug]}/` },
     robots: { index: true, follow: true },
   };
 }

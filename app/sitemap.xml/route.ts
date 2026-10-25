@@ -269,8 +269,9 @@ async function buildSitemapEntries(): Promise<SitemapEntry[]> {
     })),
   ];
 
+  const OLD_LEGAL_PATH: Record<string, string> = { "privacy-policy": "privacy-policy", "terms-conditions": "terms-and-conditions", "shipping-policy": "shipping-delivery-information", "refund-policy": "returns-exchange" };
   const legalPages: SitemapEntry[] = Object.keys(LEGAL_PAGE_TITLES).map((slug) => ({
-    url: `${SITE_URL}/legal/${slug}`,
+    url: `${SITE_URL}/${OLD_LEGAL_PATH[slug] || slug}/`,
     lastModified: new Date(),
     changeFrequency: 'monthly' as const,
     priority: 0.2,

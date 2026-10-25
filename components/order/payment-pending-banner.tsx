@@ -67,7 +67,7 @@ export default function PaymentPendingBanner({
                   <span className="font-semibold">{formatINR(totalAmount)}</span>, covered under
                   our{' '}
                   <Link
-                    href="/legal/refund-policy"
+                    href="/returns-exchange/"
                     className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700"
                   >
                     Refund &amp; Cancellation Policy
