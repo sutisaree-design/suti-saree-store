@@ -116,7 +116,7 @@ export default async function CategoryPage({ params }: Params) {
   const category = categories.find((c) => c.slug === params.slug);
   if (!category) notFound();
 
-  const categoryProducts = products.filter((p) => p.category === category.name);
+  const categoryProducts = products.filter((p) => p.category === category.name || (p.category_names ?? []).includes(category.name));
   // Same real per-image blur preview lookup as /shop (see app/shop/page.tsx
   // for the full explanation) — scoped to just this category's products.
   const cardImageUrls = new Set<string>();

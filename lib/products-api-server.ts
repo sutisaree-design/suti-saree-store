@@ -7,7 +7,7 @@ import { Product, ProductRow, CategoryRow, Category } from './types';
 // it's never even fetched for SSR'd customer pages.
 export const CUSTOMER_SAFE_PRODUCT_COLUMNS = [
   'id', 'name', 'slug', 'description', 'price', 'mrp',
-  'category_id', 'category_name', 'fabric', 'origin', 'colors', 'sizes',
+  'category_id', 'category_name', 'category_names', 'fabric', 'origin', 'colors', 'sizes',
   'occasion', 'gender', 'age_group', 'material', 'pattern', 'images',
   'video_url', 'autoplay_video_in_catalog', 'sku', 'highlights', 'stock_quantity', 'low_stock_threshold',
   'rating', 'reviews', 'featured', 'in_stock', 'created_at', 'updated_at',
@@ -66,7 +66,7 @@ export function mapRowToProduct(row: ProductRow): Product {
     id: row.id,
     name: row.name,
     slug: row.slug,
-    category: (row.category_name as Category) || 'Silk Sarees',
+    category: (row.category_name as Category) || 'Silk Sarees',    category_names: (row.category_names as string[] | null) ?? [],
     price: row.price,
     mrp: row.mrp ?? undefined,
     description: row.description ?? '',

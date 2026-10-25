@@ -63,7 +63,7 @@ export interface Product {
   id: string;
   name: string;
   slug: string;
-  category: Category;
+  category: Category;  category_names?: string[];
   price: number; // in INR (whole rupees)
   mrp?: number | null;
   description: string;
@@ -308,7 +308,7 @@ export interface ProductRow {
   price: number;
   mrp: number | null;
   category_id: string | null;
-  category_name: string | null;
+  category_name: string | null;  category_names: string[] | null;
   fabric: string | null;
   origin: string | null;
   colors: string[] | null;
