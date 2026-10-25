@@ -7,6 +7,8 @@ const nextConfig = {
   // routing layer lets the product page be cached.
   async rewrites() {
     return [
+      // Old WooCommerce feed URL (Merchant Center ke saved File URL ke liye) -> naya feed
+      { source: '/wp-content/uploads/woo-feed/google/xml/saree.xml', destination: '/feeds/google-saree.xml' },
       { source: '/product-category/:parent*/:slug', destination: '/category/:slug' },      { source: '/product-tag/:slug', destination: '/tag/:slug' },
       { source: '/privacy-policy', destination: '/legal/privacy-policy' },
       { source: '/terms-and-conditions', destination: '/legal/terms-conditions' },
