@@ -5,6 +5,31 @@ const nextConfig = {
   // app/product/[slug]/page.tsx. Reading searchParams makes a page dynamic
   // (one Vercel function invocation per visit); handling it here at the
   // routing layer lets the product page be cached.
+  // Old WordPress/WooCommerce/Rank Math URLs -> new equivalents (301).
+  // Redirects run before rewrites below.
+  async redirects() {
+    return [
+      { source: '/my-account/orders', destination: '/account/orders/', permanent: true },
+      { source: '/my-account/view-order/:id', destination: '/account/orders/', permanent: true },
+      { source: '/my-account/edit-account', destination: '/account/profile/', permanent: true },
+      { source: '/my-account/edit-address', destination: '/account/addresses/', permanent: true },
+      { source: '/my-account/edit-address/:type', destination: '/account/addresses/', permanent: true },
+      { source: '/my-account/lost-password', destination: '/forgot-password/', permanent: true },
+      { source: '/lost-password', destination: '/forgot-password/', permanent: true },
+      // Sitemaps (Rank Math / WP core / Yoast style) -> our single sitemap
+      { source: '/sitemap_index.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/wp-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/product-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/product-sitemap:n.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/page-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/post-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/product_cat-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/product_tag-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/category-sitemap.xml', destination: '/sitemap.xml', permanent: true },
+      // WP RSS feed
+      { source: '/feed', destination: '/rss.xml', permanent: true },
+    ];
+  },
   async rewrites() {
     return [
       // Old WooCommerce feed URL (Merchant Center ke saved File URL ke liye) -> naya feed
