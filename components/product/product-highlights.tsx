@@ -70,16 +70,26 @@ export default function ProductHighlights({ product, activeColor }: { product: P
     { label: 'Add On', value: h.add_on },
   ].filter((r) => r.value);
 
-  // Old-site "Specifications" block (label/value pairs, kept in the order they
-  // were saved in). Always visible, same look as the primary rows above.
+  // Old-site "Specifications" rows (label/value pairs, in the order they were
+  // saved). The first TOP_SPEC_COUNT are shown right at the top of the card with
+  // the primary rows; the rest go under "Additional Details". A spec whose label
+  // already appears in the rows above (e.g. Occasion, Blouse Fabric) is skipped so
+  // nothing shows twice.
+  const TOP_SPEC_COUNT = 4;
+  const norm = (t: string) => t.trim().toLowerCase();
+  const taken = new Set([...primaryRows, ...detailRows].map((r) => norm(r.label)));
   const specRows: Row[] = (Array.isArray(h.legacy_specs) ? h.legacy_specs : [])
-    .filter((s) => s && s.label && s.value)
+    .filter((s) => s && s.label && s.value && !taken.has(norm(s.label)))
     .map((s) => ({ label: s.label, value: s.value }));
+  const topSpecRows = specRows.slice(0, TOP_SPEC_COUNT);
+  const moreSpecRows = specRows.slice(TOP_SPEC_COUNT);
+  const topRows = [...primaryRows, ...topSpecRows];
+  const expandRows = [...moreSpecRows, ...detailRows];
 
-  if (primaryRows.length === 0 && detailRows.length === 0 && specRows.length === 0) return null;
+  if (topRows.length === 0 && expandRows.length === 0) return null;
 
   const handleCopy = async () => {
-    const lines = [...primaryRows, ...specRows, ...detailRows].map((r) => `${r.label}: ${r.value}`);
+    const lines = [...topRows, ...expandRows].map((r) => `${r.label}: ${r.value}`);
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
       setCopied(true);
@@ -104,26 +114,15 @@ export default function ProductHighlights({ product, activeColor }: { product: P
         </button>
       </div>
 
-      {primaryRows.length > 0 && (
+      {topRows.length > 0 && (
         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-          {primaryRows.map((r) => (
-            <Cell key={r.label} {...r} />
+          {topRows.map((r, i) => (
+            <Cell key={`${r.label}-${i}`} {...r} />
           ))}
         </div>
       )}
 
-      {specRows.length > 0 && (
-        <div className={primaryRows.length > 0 ? 'mt-4 border-t border-border/60 pt-3' : ''}>
-          <p className="mb-3 text-sm font-semibold text-primary">Specifications</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            {specRows.map((r) => (
-              <Cell key={r.label} {...r} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {detailRows.length > 0 && (
+      {expandRows.length > 0 && (
         <>
           <button
             type="button"
@@ -135,8 +134,8 @@ export default function ProductHighlights({ product, activeColor }: { product: P
           </button>
           {expanded && (
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-              {detailRows.map((r) => (
-                <Cell key={r.label} {...r} />
+              {expandRows.map((r, i) => (
+                <Cell key={`${r.label}-${i}`} {...r} />
               ))}
             </div>
           )}
