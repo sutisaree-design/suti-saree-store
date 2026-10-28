@@ -1,23 +1,28 @@
-﻿import { MetadataRoute } from 'next';
+import { MetadataRoute } from 'next';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com';
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
+
+// Private / non-content paths (never needed by Google for product checks).
+const PRIVATE_PATHS = ['/admin', '/checkout', '/cart', '/api/', '/track/', '/order-confirmation/'];
 
 export default function robots(): MetadataRoute.Robots {
-  // Test period: block all crawlers until ALLOW_INDEXING=true is set in Vercel.
-  if (process.env.ALLOW_INDEXING !== 'true') {
+  // Indexing is ALLOWED by default (live site after migration).
+  // Only set BLOCK_INDEXING=true on a staging/test deployment to block crawlers.
+  if (process.env.BLOCK_INDEXING === 'true') {
     return {
       rules: { userAgent: '*', disallow: '/' },
     };
   }
 
   return {
-    rules: {
-      userAgent: '*',
-      allow: '/',
-      // Private order/guest pages - contain personal order data.
-      // Must never appear in Google search results.
-      disallow: ['/admin', '/checkout', '/cart', '/api/', '/track/', '/order-confirmation/'],
-    },
+    rules: [
+      // Merchant Center needs Googlebot (landing pages) AND Googlebot-Image (images).
+      // AdsBot-Google ignores the '*' group, so it is listed explicitly too.
+      { userAgent: 'Googlebot', allow: '/', disallow: PRIVATE_PATHS },
+      { userAgent: 'Googlebot-Image', allow: '/' },
+      { userAgent: 'AdsBot-Google', allow: '/', disallow: PRIVATE_PATHS },
+      { userAgent: '*', allow: '/', disallow: PRIVATE_PATHS },
+    ],
     sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

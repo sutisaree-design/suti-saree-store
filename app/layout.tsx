@@ -149,12 +149,13 @@ export async function generateMetadata(): Promise<Metadata> {
       description: seo.meta_description,
       images: seo.og_image ? [seo.og_image] : undefined,
     },
+    // Indexing is ON by default. Set BLOCK_INDEXING=true only on staging.
     robots: {
-      index: process.env.ALLOW_INDEXING === 'true',
-      follow: process.env.ALLOW_INDEXING === 'true',
+      index: process.env.BLOCK_INDEXING !== 'true',
+      follow: process.env.BLOCK_INDEXING !== 'true',
       googleBot: {
-        index: process.env.ALLOW_INDEXING === 'true',
-        follow: process.env.ALLOW_INDEXING === 'true',
+        index: process.env.BLOCK_INDEXING !== 'true',
+        follow: process.env.BLOCK_INDEXING !== 'true',
         'max-image-preview': 'large',
       },
     },
