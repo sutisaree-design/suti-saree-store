@@ -176,21 +176,35 @@ const mapFile = path.join(PHOTOS_DIR, '_map.csv');
 let missingPhotoFiles = 0;
 if (fs.existsSync(mapFile)) {
   const csv = parseCsv(fs.readFileSync(mapFile, 'utf8').replace(/^\uFEFF/, ''));
-  const header = csv[0].map((h) => h.trim().toLowerCase());
-  const cIdx = header.findIndex((h) => /comment/.test(h));
-  let fIdx = header.findIndex((h) => /(file|name|path)/.test(h) && !/comment/.test(h));
-  if (cIdx < 0 || fIdx < 0) {
-    console.error('_map.csv ke header samajh nahi aaye. Header ke column naam:', JSON.stringify(csv[0]));
-    console.error('Mujhe ye header line bhejo (sirf pehli line), phir script me column fix kar dunga.');
-    process.exit(1);
+  // _map.csv ka format: header ke bina bhi chalta hai.
+  //   bina header: comment_id, purana path (2025/11/x.jpg), local file name (2025__11__x.jpg)
+  //   header ke saath: "comment" wala column + "file/name/path" wala column
+  const first = csv[0] || [];
+  const hasHeader = !/^\d+$/.test((first[0] || '').trim());
+  let rowsCsv = csv, cIdx = 0, fIdxs = [2, 1];
+  if (hasHeader) {
+    const header = first.map((h) => h.trim().toLowerCase());
+    cIdx = header.findIndex((h) => /comment/.test(h));
+    const f = header.findIndex((h) => /(file|name|path)/.test(h) && !/comment/.test(h));
+    if (cIdx < 0 || f < 0) {
+      console.error('_map.csv ke header samajh nahi aaye. Header ke column naam:', JSON.stringify(first));
+      process.exit(1);
+    }
+    fIdxs = [f];
+    rowsCsv = csv.slice(1);
   }
-  for (const r of csv.slice(1)) {
+  for (const r of rowsCsv) {
     const cid = (r[cIdx] || '').trim();
-    const f = path.basename((r[fIdx] || '').trim().replace(/\\/g, '/'));
-    if (!cid || !f) continue;
-    if (!fs.existsSync(path.join(PHOTOS_DIR, f))) { missingPhotoFiles++; continue; }
+    if (!cid) continue;
+    // pehle local naam (col 3) try karo, na mile to purane path ka naam (col 2)
+    let found = null;
+    for (const fi of fIdxs) {
+      const f = path.basename((r[fi] || '').trim().replace(/\\/g, '/'));
+      if (f && fs.existsSync(path.join(PHOTOS_DIR, f))) { found = f; break; }
+    }
+    if (!found) { missingPhotoFiles++; continue; }
     if (!photosByComment.has(cid)) photosByComment.set(cid, []);
-    photosByComment.get(cid).push(f);
+    photosByComment.get(cid).push(found);
   }
   console.log('Photos map: reviews with photos =', photosByComment.size, '| map me file folder me nahi mili =', missingPhotoFiles);
 } else {
