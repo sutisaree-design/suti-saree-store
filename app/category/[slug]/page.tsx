@@ -99,9 +99,17 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
+// Only the first few categories are pre-rendered at build time (each page loads
+// the whole catalog from Supabase, so building all of them at once made deploys
+// slow and caused connection resets). The rest render on first visit and are
+// then cached (ISR, revalidate below). Set PRERENDER_TOP_CATEGORIES in Vercel
+// to change N (0 = pre-render none).
+const PRERENDER_TOP_CATEGORIES = Number(process.env.PRERENDER_TOP_CATEGORIES ?? 6);
+
 export async function generateStaticParams() {
+  if (PRERENDER_TOP_CATEGORIES <= 0) return [] as { slug: string }[];
   const categories = await fetchCategoriesServer();
-  return categories.map((c) => ({ slug: c.slug }));
+  return categories.slice(0, PRERENDER_TOP_CATEGORIES).map((c) => ({ slug: c.slug }));
 }
 
 export default async function CategoryPage({ params }: Params) {

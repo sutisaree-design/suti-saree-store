@@ -4,7 +4,6 @@ import Link from 'next/link';
 import {
   fetchProductsServer,
   fetchTagBySlugServer,
-  fetchAllTagsServer,
   fetchTagProductIdsServer,
 } from '@/lib/products-api-server';
 import { fetchPopularityRankServer } from '@/lib/popularity-rank-server';
@@ -31,9 +30,13 @@ async function getTagProducts(tagId: string) {
   return products.filter((p) => idSet.has(p.id));
 }
 
+// Tag pages are NOT pre-rendered at build time. Every tag page loads the whole
+// catalog from Supabase, so building hundreds of them at once overloaded the
+// connection (EPIPE/ECONNRESET) and made deploys take 10+ minutes. Returning []
+// keeps the page ISR: it renders on the first visit, is cached (revalidate
+// below), and still purges via revalidatePath. dynamicParams stays true.
 export async function generateStaticParams() {
-  const tags = await fetchAllTagsServer();
-  return tags.map((t) => ({ slug: t.slug }));
+  return [] as { slug: string }[];
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
