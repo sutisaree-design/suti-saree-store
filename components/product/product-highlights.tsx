@@ -70,10 +70,16 @@ export default function ProductHighlights({ product, activeColor }: { product: P
     { label: 'Add On', value: h.add_on },
   ].filter((r) => r.value);
 
-  if (primaryRows.length === 0 && detailRows.length === 0) return null;
+  // Old-site "Specifications" block (label/value pairs, kept in the order they
+  // were saved in). Always visible, same look as the primary rows above.
+  const specRows: Row[] = (Array.isArray(h.legacy_specs) ? h.legacy_specs : [])
+    .filter((s) => s && s.label && s.value)
+    .map((s) => ({ label: s.label, value: s.value }));
+
+  if (primaryRows.length === 0 && detailRows.length === 0 && specRows.length === 0) return null;
 
   const handleCopy = async () => {
-    const lines = [...primaryRows, ...detailRows].map((r) => `${r.label}: ${r.value}`);
+    const lines = [...primaryRows, ...specRows, ...detailRows].map((r) => `${r.label}: ${r.value}`);
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
       setCopied(true);
@@ -103,6 +109,17 @@ export default function ProductHighlights({ product, activeColor }: { product: P
           {primaryRows.map((r) => (
             <Cell key={r.label} {...r} />
           ))}
+        </div>
+      )}
+
+      {specRows.length > 0 && (
+        <div className={primaryRows.length > 0 ? 'mt-4 border-t border-border/60 pt-3' : ''}>
+          <p className="mb-3 text-sm font-semibold text-primary">Specifications</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {specRows.map((r) => (
+              <Cell key={r.label} {...r} />
+            ))}
+          </div>
         </div>
       )}
 

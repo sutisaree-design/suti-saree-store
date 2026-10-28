@@ -3,7 +3,7 @@
 import { useState, FormEvent, useEffect, useMemo, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Plus, Pencil, Trash2, ArrowLeft, Upload, Loader2, Sparkles, Link2, Palette, Wand2, Search, X, Truck, Package, Facebook, Instagram, Video, ExternalLink, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, ArrowLeft, Upload, Loader2, Sparkles, Link2, Palette, Wand2, Search, X, Truck, Package, Facebook, Instagram, Video, ExternalLink, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 import { useProducts, usePaymentDiscount } from '@/lib/cart-context';
 import {
   createProduct,
@@ -226,6 +226,81 @@ const applyCsvSuggestion = (value: string, pickedName: string) => {
   parts[parts.length - 1] = pickedName;
   return parts.filter((p) => p.length > 0).join(', ') + ', ';
 };
+
+type SpecRow = { label: string; value: string };
+
+/**
+ * Editor for the storefront "Specifications" rows (label + value pairs, e.g.
+ * Weave -> Fine and even). Same data the old WooCommerce short description
+ * carried; rows keep their order on the product page.
+ */
+function SpecsEditor({ value, onChange }: { value: SpecRow[]; onChange: (rows: SpecRow[]) => void }) {
+  const setRow = (i: number, patch: Partial<SpecRow>) =>
+    onChange(value.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  return (
+    <div className="grid gap-2 border-t border-border/60 pt-3">
+      <div>
+        <p className="text-sm font-medium">Specifications (shown on the product page)</p>
+        <p className="text-xs text-muted-foreground">
+          Label + value rows, e.g. Weave &rarr; Fine and even. They show in this order. Rows with a blank label or
+          value are dropped when you save.
+        </p>
+      </div>
+      {value.map((row, i) => (
+        <div key={i} className="grid grid-cols-[1fr_1.5fr_auto] items-center gap-2">
+          <Input
+            value={row.label}
+            onChange={(e) => setRow(i, { label: e.target.value })}
+            placeholder="Label (e.g. Weave)"
+            aria-label={`Specification ${i + 1} label`}
+          />
+          <Input
+            value={row.value}
+            onChange={(e) => setRow(i, { value: e.target.value })}
+            placeholder="Value"
+            aria-label={`Specification ${i + 1} value`}
+          />
+          <div className="flex items-center">
+            <Button type="button" variant="ghost" size="icon" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => move(i, 1)}
+              disabled={i === value.length - 1}
+              aria-label="Move down"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+              aria-label="Remove row"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ))}
+      <div>
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...value, { label: '', value: '' }])}>
+          <Plus className="mr-1 h-4 w-4" /> Add row
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const emptyHighlights = (): ProductHighlights => ({
   border: '',
@@ -1146,7 +1221,13 @@ export default function ProductsPanel() {
       // toggle was switched on, don't silently keep autoplay flagged.
       autoplay_video_in_catalog: form.video_url.trim() ? form.autoplay_video_in_catalog : false,
       sku: form.sku.trim() || generateProductSku(form.name, form.category_name),
-      highlights: form.highlights,
+      highlights: {
+        ...form.highlights,
+        // Drop half-filled specification rows before saving.
+        legacy_specs: (form.highlights.legacy_specs || [])
+          .map((r) => ({ label: r.label.trim(), value: r.value.trim() }))
+          .filter((r) => r.label && r.value),
+      },
       stock_quantity: newStockQty,
       low_stock_threshold: Number(form.low_stock_threshold) || 5,
       // Preserve an intentional 0 (no reviews) -- don't fabricate 4.5.
@@ -1530,6 +1611,7 @@ export default function ProductsPanel() {
                     <p className="line-clamp-1 text-sm font-semibold hover:text-primary hover:underline">{p.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {p.fabric || '—'} · {p.origin || '—'} {p.sku ? `· SKU ${p.sku}` : ''}
+                      {(p.highlights?.legacy_specs?.length ?? 0) > 0 ? ` · ${p.highlights?.legacy_specs?.length} specs` : ''}
                     </p>
                     {sourcingByProduct[p.id] && (
                       <p className="text-xs text-muted-foreground" title="Admin-only — never shown on the storefront">
@@ -2521,6 +2603,10 @@ export default function ProductsPanel() {
                   />
                 </div>
               </div>
+              <SpecsEditor
+                value={form.highlights.legacy_specs || []}
+                onChange={(rows) => setForm((f) => ({ ...f, highlights: { ...f.highlights, legacy_specs: rows } }))}
+              />
             </div>
 
             {/* Image upload + URL list */}

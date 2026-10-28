@@ -57,6 +57,11 @@ export interface ProductHighlights {
   generic_name?: string;
   country_of_origin?: string;
   transparency?: string;
+
+  // "Specifications" rows carried over from the old WooCommerce short
+  // description (label/value pairs, shown in this order on the PDP and
+  // editable in admin). Empty/blank rows are ignored on the storefront.
+  legacy_specs?: { label: string; value: string }[];
 }
 
 export interface Product {
