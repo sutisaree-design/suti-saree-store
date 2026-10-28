@@ -6,7 +6,7 @@ import { toPublicMediaUrls } from '@/lib/media-url';
 
 const SITE_URL = 'https://www.sutisaree.com';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 function esc(s: unknown): string {
   return String(s ?? '')
