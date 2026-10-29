@@ -1,4 +1,9 @@
 import { getSupabaseBrowser } from './supabase-browser';
+import {
+  DEFAULT_REVIEW_DISPLAY_SETTINGS,
+  mergeReviewDisplaySettings,
+  type ReviewDisplaySettings,
+} from './review-display-settings';
 
 export interface Review {
   id: string;
@@ -322,4 +327,43 @@ export async function updateMyReview(
     .single();
   if (error) throw error;
   return { ...data, photos: (data as any).photos ?? [] } as Review;
+}
+
+
+/** Storefront: how the Reviews section should look (counts, filters, pinned
+ *  reviews). Public read; falls back to defaults on any error so the page
+ *  never breaks because of a settings problem. */
+export async function fetchReviewDisplaySettings(): Promise<ReviewDisplaySettings> {
+  try {
+    const supabase = getSupabaseBrowser();
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'review_display_settings')
+      .maybeSingle();
+    if (error || !data) return DEFAULT_REVIEW_DISPLAY_SETTINGS;
+    return mergeReviewDisplaySettings(data.value as Partial<ReviewDisplaySettings>);
+  } catch {
+    return DEFAULT_REVIEW_DISPLAY_SETTINGS;
+  }
+}
+
+/** Admin: load the display settings. */
+export async function fetchReviewDisplaySettingsAdmin(): Promise<ReviewDisplaySettings> {
+  const res = await fetch('/api/admin/review-display-settings');
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || 'Failed to load display settings');
+  return mergeReviewDisplaySettings(json.settings);
+}
+
+/** Admin: save the display settings (admin-token gated API route). */
+export async function saveReviewDisplaySettingsAdmin(settings: ReviewDisplaySettings): Promise<ReviewDisplaySettings> {
+  const res = await fetch('/api/admin/review-display-settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || 'Failed to save display settings');
+  return mergeReviewDisplaySettings(json.settings);
 }

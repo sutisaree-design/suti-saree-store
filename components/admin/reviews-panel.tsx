@@ -3,15 +3,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdminFocus } from './use-admin-focus';
 import Link from 'next/link';
-import { Check, EyeOff, Trash2, Star, Search, X } from 'lucide-react';
+import { Check, EyeOff, Trash2, Star, Search, X, Pin, PinOff, Settings2, Loader2 } from 'lucide-react';
 import {
   fetchAllReviewsAdmin,
   approveReviewAdmin,
   rejectReviewAdmin,
   deleteReviewAdmin,
+  fetchReviewDisplaySettingsAdmin,
+  saveReviewDisplaySettingsAdmin,
   hasWrittenContent,
   AdminReview,
 } from '@/lib/reviews-api';
+import {
+  DEFAULT_REVIEW_DISPLAY_SETTINGS,
+  mergeReviewDisplaySettings,
+  type ReviewDisplaySettings,
+  type ReviewSort,
+} from '@/lib/review-display-settings';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -47,6 +55,13 @@ export default function ReviewsPanel() {
   const [confirmTarget, setConfirmTarget] = useState<AdminReview | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Storefront display settings (how the product-page Reviews section looks).
+  const [displaySettings, setDisplaySettings] = useState<ReviewDisplaySettings>(DEFAULT_REVIEW_DISPLAY_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  // The list can hold hundreds of reviews -- render it in pages.
+  const PAGE = 40;
+  const [listLimit, setListLimit] = useState(PAGE);
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +78,42 @@ export default function ReviewsPanel() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    fetchReviewDisplaySettingsAdmin()
+      .then(setDisplaySettings)
+      .catch(() => {
+        /* keep defaults; saving will create the setting */
+      });
+  }, []);
+
+  useEffect(() => {
+    setListLimit(PAGE);
+  }, [section, statusFilter, search]);
+
+  const saveSettings = async (next: ReviewDisplaySettings, okMessage = 'Display settings saved') => {
+    setSavingSettings(true);
+    try {
+      const saved = await saveReviewDisplaySettingsAdmin(mergeReviewDisplaySettings(next));
+      setDisplaySettings(saved);
+      toast.success(okMessage);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const togglePin = async (r: AdminReview) => {
+    const pinned = displaySettings.featuredReviewIds.includes(r.id);
+    const ids = pinned
+      ? displaySettings.featuredReviewIds.filter((id) => id !== r.id)
+      : [r.id, ...displaySettings.featuredReviewIds];
+    await saveSettings(
+      { ...displaySettings, featuredReviewIds: ids },
+      pinned ? 'Unpinned' : 'Pinned to the top of the product page'
+    );
+  };
 
   // Bell deep link: switch to the right tab (written review vs star-only
   // rating), clear filters so it's visible, then highlight it.
@@ -166,7 +217,7 @@ export default function ReviewsPanel() {
     }
     return (
       <div className="grid gap-3">
-        {list.map((r) => (
+        {list.slice(0, listLimit).map((r) => (
           <div key={r.id} data-focus-id={r.id} className="rounded-lg border border-border/60 bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -183,6 +234,11 @@ export default function ReviewsPanel() {
                   <Badge variant={r.is_approved ? 'default' : 'outline'} className="text-xs">
                     {r.is_approved ? 'Published' : 'Pending'}
                   </Badge>
+                  {displaySettings.featuredReviewIds.includes(r.id) && (
+                    <Badge variant="secondary" className="gap-1 text-xs">
+                      <Pin className="h-3 w-3" /> Pinned
+                    </Badge>
+                  )}
                 </div>
                 {r.product_slug ? (
                   <Link
@@ -240,6 +296,25 @@ export default function ReviewsPanel() {
                     <EyeOff className="mr-1 h-3.5 w-3.5" /> Hide
                   </Button>
                 )}
+                {r.is_approved && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => togglePin(r)}
+                    disabled={savingSettings}
+                    title={
+                      displaySettings.featuredReviewIds.includes(r.id)
+                        ? 'Unpin from the top of the product page'
+                        : 'Pin to the top of the product page'
+                    }
+                  >
+                    {displaySettings.featuredReviewIds.includes(r.id) ? (
+                      <PinOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Pin className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -253,6 +328,16 @@ export default function ReviewsPanel() {
             </div>
           </div>
         ))}
+        {list.length > listLimit && (
+          <div className="flex flex-col items-center gap-2 pt-1">
+            <p className="text-xs text-muted-foreground">
+              Showing {listLimit} of {list.length}
+            </p>
+            <Button variant="outline" onClick={() => setListLimit((n) => n + PAGE)}>
+              Show {Math.min(PAGE, list.length - listLimit)} more
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
@@ -275,6 +360,113 @@ export default function ReviewsPanel() {
             take one down.
           </p>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-border/60 bg-card">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 p-4 text-left"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <Settings2 className="h-4 w-4 text-secondary" />
+            Product page display settings
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {displaySettings.initialCount} shown first · +{displaySettings.loadMoreCount} per &ldquo;Load more&rdquo; ·{' '}
+            {displaySettings.featuredReviewIds.length} pinned
+          </span>
+        </button>
+        {settingsOpen && (
+          <div className="grid gap-4 border-t border-border/60 p-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                Reviews shown first
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={displaySettings.initialCount}
+                  onChange={(e) => setDisplaySettings((d) => ({ ...d, initialCount: Number(e.target.value) || 1 }))}
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                Added on each &ldquo;Load more&rdquo;
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={displaySettings.loadMoreCount}
+                  onChange={(e) => setDisplaySettings((d) => ({ ...d, loadMoreCount: Number(e.target.value) || 1 }))}
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                Photos in the top strip
+                <Input
+                  type="number"
+                  min={4}
+                  max={60}
+                  value={displaySettings.photoGalleryMax}
+                  onChange={(e) => setDisplaySettings((d) => ({ ...d, photoGalleryMax: Number(e.target.value) || 4 }))}
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              {([
+                ['showPhotoGallery', 'Show "Photos from customers" strip'],
+                ['showFilters', 'Show filters and sort menu'],
+                ['showColorFilter', 'Show variation (colour) filter'],
+              ] as [keyof ReviewDisplaySettings, string][]).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={Boolean(displaySettings[key])}
+                    onChange={(e) => setDisplaySettings((d) => ({ ...d, [key]: e.target.checked }))}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            <label className="grid max-w-xs gap-1 text-xs font-medium text-muted-foreground">
+              Default sort (pinned reviews always stay first)
+              <Select
+                value={displaySettings.defaultSort}
+                onValueChange={(v) => setDisplaySettings((d) => ({ ...d, defaultSort: v as ReviewSort }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Most recent</SelectItem>
+                  <SelectItem value="photos">Photos first</SelectItem>
+                  <SelectItem value="highest">Highest rating</SelectItem>
+                  <SelectItem value="lowest">Lowest rating</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+
+            <p className="text-xs text-muted-foreground">
+              Pin a review with the pin button on any published review below; pinned reviews show first
+              on the product page and their photos lead the photo strip. Changes show up on the next page load
+              of the product page.
+            </p>
+
+            <div>
+              <Button onClick={() => saveSettings(displaySettings)} disabled={savingSettings} className="bg-primary">
+                {savingSettings ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Saving...
+                  </>
+                ) : (
+                  'Save display settings'
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Tabs value={section} onValueChange={(v) => setSection(v as Section)}>

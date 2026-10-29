@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Star, CheckCircle2, ImagePlus, X, Loader2, ThumbsUp } from 'lucide-react';
+import { Star, CheckCircle2, ImagePlus, X, Loader2, ThumbsUp, ChevronLeft, ChevronRight, Camera, Pin, SlidersHorizontal } from 'lucide-react';
 import { toPublicMediaUrl } from '@/lib/media-url';
 import { useAuth } from '@/lib/auth-context';
 import {
   Review,
   fetchApprovedReviews,
+  fetchReviewDisplaySettings,
   fetchMyReviewForProduct,
   filterReviewsByColor,
   getReviewColorOptions,
@@ -19,6 +20,7 @@ import {
   updateMyReview,
   uploadReviewPhoto,
 } from '@/lib/reviews-api';
+import { DEFAULT_REVIEW_DISPLAY_SETTINGS, type ReviewDisplaySettings, type ReviewSort } from '@/lib/review-display-settings';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -113,6 +115,264 @@ function reviewThumbUrl(src: string): string {
   return `${full.slice(0, dot)}-sm.webp`;
 }
 
+
+type RatingFilter = 'all' | 'photos' | '5' | '4' | 'low';
+
+interface PhotoItem {
+  src: string;
+  reviewId: string;
+  name: string;
+  rating: number;
+  comment: string | null;
+}
+
+/** Square thumbnail that falls back to the original photo when the
+ *  "-sm.webp" sibling does not exist yet (older / imported photos). */
+function PhotoThumb({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={reviewThumbUrl(src)}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={(e) => {
+        const img = e.currentTarget;
+        if (img.dataset.fallback) return;
+        img.dataset.fallback = '1';
+        img.src = toPublicMediaUrl(src) || src;
+      }}
+      className={className}
+    />
+  );
+}
+
+/** Full-screen photo viewer with previous / next, keyboard and swipe. */
+function PhotoLightbox({
+  items,
+  index,
+  onIndex,
+  onClose,
+}: {
+  items: PhotoItem[];
+  index: number;
+  onIndex: (i: number) => void;
+  onClose: () => void;
+}) {
+  const [touchX, setTouchX] = useState<number | null>(null);
+  const item = items[index];
+  const go = (dir: -1 | 1) => onIndex((index + dir + items.length) % items.length);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, items.length]);
+
+  if (!item) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/95"
+      onClick={onClose}
+      onTouchStart={(e) => setTouchX(e.touches[0].clientX)}
+      onTouchEnd={(e) => {
+        if (touchX === null) return;
+        const dx = e.changedTouches[0].clientX - touchX;
+        setTouchX(null);
+        if (Math.abs(dx) > 50 && items.length > 1) go(dx > 0 ? -1 : 1);
+      }}
+    >
+      <div className="flex items-center justify-between px-4 py-3 text-white/80">
+        <span className="text-xs font-medium tracking-wide">
+          {index + 1} / {items.length}
+        </span>
+        <button
+          type="button"
+          aria-label="Close photo"
+          onClick={onClose}
+          className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-14">
+        {items.length > 1 && (
+          <button
+            type="button"
+            aria-label="Previous photo"
+            onClick={(e) => {
+              e.stopPropagation();
+              go(-1);
+            }}
+            className="absolute left-2 z-10 hidden rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 sm:block"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={toPublicMediaUrl(item.src) || item.src}
+          alt={`Photo from ${item.name}'s review`}
+          className="max-h-full max-w-full rounded-xl object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+        {items.length > 1 && (
+          <button
+            type="button"
+            aria-label="Next photo"
+            onClick={(e) => {
+              e.stopPropagation();
+              go(1);
+            }}
+            className="absolute right-2 z-10 hidden rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 sm:block"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        )}
+      </div>
+
+      <div className="px-4 pb-6 pt-3 text-white" onClick={(e) => e.stopPropagation()}>
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-1.5 text-center">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{item.name}</span>
+            <StarRow value={item.rating} size="h-3.5 w-3.5" />
+          </div>
+          {item.comment && <p className="line-clamp-2 text-xs leading-relaxed text-white/70">{item.comment}</p>}
+          {items.length > 1 && <p className="text-[11px] text-white/40 sm:hidden">Swipe left or right for more photos</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const COMMENT_CLAMP = 220;
+
+function ReviewCard({
+  r,
+  featured,
+  helpful,
+  helpfulCount,
+  onToggleHelpful,
+  onOpenPhoto,
+}: {
+  r: Review;
+  featured: boolean;
+  helpful: boolean;
+  helpfulCount: number;
+  onToggleHelpful: () => void;
+  onOpenPhoto: (src: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const long = (r.comment?.length ?? 0) > COMMENT_CLAMP;
+  const photos = (r.photos ?? []).filter(Boolean);
+  return (
+    <li className="rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_12px_-6px_rgba(0,0,0,0.08)] sm:p-5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-xs font-semibold text-primary-foreground shadow-sm">
+          {initials(r.customer_name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm font-semibold text-foreground">{firstName(r.customer_name)}</span>
+            {r.verified_purchase && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400">
+                <CheckCircle2 className="h-3 w-3" />
+                Verified Purchase
+              </span>
+            )}
+            {featured && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary/15 px-2 py-0.5 text-[11px] font-semibold text-secondary">
+                <Pin className="h-3 w-3" />
+                Top review
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 px-2 py-0.5 text-xs font-semibold text-white shadow-sm">
+              {r.rating.toFixed(1)}
+              <Star className="h-3 w-3 fill-white" />
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {new Date(r.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+            {r.variant_color && (
+              <span className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {r.variant_color}
+              </span>
+            )}
+          </div>
+
+          {r.title && <p className="mt-3 text-sm font-semibold text-foreground">{r.title}</p>}
+          {r.comment && (
+            <p
+              className={`mt-1.5 whitespace-pre-line break-words text-sm leading-relaxed text-foreground/80 ${
+                long && !expanded ? 'line-clamp-4' : ''
+              }`}
+            >
+              {r.comment}
+            </p>
+          )}
+          {long && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              {expanded ? 'Show less' : 'Read more'}
+            </button>
+          )}
+
+          {photos.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {photos.map((src, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => onOpenPhoto(src)}
+                  className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border/60 transition-transform active:scale-95 sm:h-24 sm:w-24"
+                  aria-label={`Open photo ${idx + 1} from ${firstName(r.customer_name)}`}
+                >
+                  <PhotoThumb
+                    src={src}
+                    alt={`Photo from ${firstName(r.customer_name)}'s review`}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onToggleHelpful}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-all duration-200 active:scale-95 ${
+                helpful
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary'
+              }`}
+            >
+              <ThumbsUp className={`h-3 w-3 ${helpful ? 'fill-primary' : ''}`} />
+              Helpful{helpfulCount ? ` (${helpfulCount})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+const chipBase =
+  'shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors';
+const chipOn = 'border-primary bg-primary text-primary-foreground shadow-sm';
+const chipOff = 'border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-primary';
+
 export default function ReviewsSection({
   productId,
   productSlug,
@@ -140,7 +400,11 @@ export default function ReviewsSection({
   const [submitting, setSubmitting] = useState(false);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [settings, setSettings] = useState<ReviewDisplaySettings>(DEFAULT_REVIEW_DISPLAY_SETTINGS);
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
+  const [sort, setSort] = useState<ReviewSort>(DEFAULT_REVIEW_DISPLAY_SETTINGS.defaultSort);
+  const [visibleCount, setVisibleCount] = useState(DEFAULT_REVIEW_DISPLAY_SETTINGS.initialCount);
   const [helpfulVotes, setHelpfulVotes] = useState<Record<string, number>>({});
   const [markedHelpful, setMarkedHelpful] = useState<Record<string, boolean>>({});
   /** null = "All colours". Starts unset (showing every review) even when
@@ -176,6 +440,18 @@ export default function ReviewsSection({
   }, [productId]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetchReviewDisplaySettings().then((s) => {
+      if (cancelled) return;
+      setSettings(s);
+      setSort(s.defaultSort);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setMyReview(null);
       setEligible(false);
@@ -188,6 +464,70 @@ export default function ReviewsSection({
   const summary = summarizeReviews(reviews);
   const colorOptions = getReviewColorOptions(reviews);
   const filteredReviews = filterReviewsByColor(reviews, colorFilter);
+
+  const featuredSet = useMemo(() => new Set(settings.featuredReviewIds), [settings.featuredReviewIds]);
+
+  // Every customer photo (pinned reviews first, then newest) -- feeds the
+  // strip at the top and the full-screen viewer.
+  const allPhotos = useMemo<PhotoItem[]>(() => {
+    const ordered = [...reviews].sort((a, b) => Number(featuredSet.has(b.id)) - Number(featuredSet.has(a.id)));
+    const out: PhotoItem[] = [];
+    for (const r of ordered) {
+      for (const src of r.photos ?? []) {
+        if (src) out.push({ src, reviewId: r.id, name: firstName(r.customer_name), rating: r.rating, comment: r.comment });
+      }
+    }
+    return out;
+  }, [reviews, featuredSet]);
+
+  const matchesRating = (r: Review) =>
+    ratingFilter === 'all'
+      ? true
+      : ratingFilter === 'photos'
+      ? (r.photos?.length ?? 0) > 0
+      : ratingFilter === '5'
+      ? r.rating === 5
+      : ratingFilter === '4'
+      ? r.rating === 4
+      : r.rating <= 3;
+
+  const chipCounts = {
+    all: filteredReviews.length,
+    photos: filteredReviews.filter((r) => (r.photos?.length ?? 0) > 0).length,
+    '5': filteredReviews.filter((r) => r.rating === 5).length,
+    '4': filteredReviews.filter((r) => r.rating === 4).length,
+    low: filteredReviews.filter((r) => r.rating <= 3).length,
+  };
+
+  const sortedReviews = useMemo(() => {
+    const list = filteredReviews.filter(matchesRating);
+    const time = (r: Review) => new Date(r.created_at).getTime();
+    const hasPhoto = (r: Review) => ((r.photos?.length ?? 0) > 0 ? 1 : 0);
+    return list.sort((a, b) => {
+      const pin = Number(featuredSet.has(b.id)) - Number(featuredSet.has(a.id));
+      if (pin !== 0) return pin;
+      if (sort === 'highest') return b.rating - a.rating || time(b) - time(a);
+      if (sort === 'lowest') return a.rating - b.rating || time(b) - time(a);
+      if (sort === 'photos') return hasPhoto(b) - hasPhoto(a) || time(b) - time(a);
+      return time(b) - time(a);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredReviews, ratingFilter, sort, featuredSet]);
+
+  // Back to the first page whenever the shopper changes what they are looking at.
+  useEffect(() => {
+    setVisibleCount(settings.initialCount);
+  }, [ratingFilter, colorFilter, sort, settings.initialCount, productId]);
+
+  const visibleReviews = sortedReviews.slice(0, visibleCount);
+  const remaining = Math.max(0, sortedReviews.length - visibleReviews.length);
+
+  const openPhoto = (reviewId: string, src: string) => {
+    const idx = allPhotos.findIndex((p) => p.reviewId === reviewId && p.src === src);
+    setLightboxIndex(idx >= 0 ? idx : 0);
+  };
+  const galleryItems = allPhotos.slice(0, settings.photoGalleryMax);
+  const galleryExtra = Math.max(0, allPhotos.length - galleryItems.length);
 
   const onPickPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
@@ -278,8 +618,8 @@ export default function ReviewsSection({
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[300px_1fr]">
-      <div className="relative flex flex-col gap-5 overflow-hidden rounded-2xl border border-secondary/25 bg-gradient-to-b from-secondary/[0.06] via-card to-card p-5 shadow-[0_2px_24px_-8px_rgba(0,0,0,0.08)]">
+    <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:gap-8">
+      <div className="relative flex flex-col gap-5 overflow-hidden rounded-3xl border border-secondary/25 bg-gradient-to-b from-secondary/[0.06] via-card to-card p-5 shadow-[0_2px_24px_-8px_rgba(0,0,0,0.08)]">
         <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-secondary/10 blur-2xl" />
 
         <div className="relative flex items-end gap-3">
@@ -368,7 +708,52 @@ export default function ReviewsSection({
         )}
       </div>
 
-      <div className="flex flex-col gap-6">
+
+      <div className="flex min-w-0 flex-col gap-5">
+        {settings.showPhotoGallery && allPhotos.length > 0 && (
+          <section className="rounded-3xl border border-border/60 bg-card p-4 shadow-[0_2px_24px_-12px_rgba(0,0,0,0.1)] sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Camera className="h-4 w-4 text-secondary" />
+                Photos from customers
+                <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[11px] font-semibold text-secondary">
+                  {allPhotos.length}
+                </span>
+              </h3>
+              {chipCounts.photos > 0 && settings.showFilters && (
+                <button
+                  type="button"
+                  onClick={() => setRatingFilter('photos')}
+                  className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  See reviews with photos
+                </button>
+              )}
+            </div>
+            <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {galleryItems.map((p, i) => {
+                const isLast = i === galleryItems.length - 1 && galleryExtra > 0;
+                return (
+                  <button
+                    key={`${p.reviewId}-${i}`}
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    aria-label={isLast ? `See ${galleryExtra} more photos` : `Open customer photo ${i + 1}`}
+                    className="relative h-24 w-24 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60 transition-transform active:scale-95 sm:h-28 sm:w-28"
+                  >
+                    <PhotoThumb src={p.src} alt={`Customer photo ${i + 1}`} className="h-full w-full object-cover" />
+                    {isLast && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-base font-semibold text-white">
+                        +{galleryExtra + 1}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {formOpen && (
           <div className="rounded-lg border border-border/60 bg-card p-5">
             {step === 'rating' ? (
@@ -474,181 +859,149 @@ export default function ReviewsSection({
           </div>
         )}
 
-        {colorOptions.length > 1 && (
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Filter by colour:</span>
-            <button
-              type="button"
-              onClick={() => setColorFilter(null)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                colorFilter === null
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary'
-              }`}
-            >
-              All colours ({reviews.length})
-            </button>
-            {colorOptions.map((color) => {
-              const count = reviews.filter((r) => r.variant_color?.trim().toLowerCase() === color.toLowerCase()).length;
-              const active = colorFilter?.toLowerCase() === color.toLowerCase();
-              return (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => setColorFilter(color)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    active
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : color.toLowerCase() === selectedColor?.toLowerCase()
-                      ? 'border-secondary/60 text-secondary'
-                      : 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary'
-                  }`}
+
+        {settings.showFilters && reviews.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filter
+              </p>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Sort
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as ReviewSort)}
+                  className="rounded-full border border-border/60 bg-card px-3 py-1.5 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  {color} ({count})
+                  <option value="newest">Most recent</option>
+                  <option value="photos">Photos first</option>
+                  <option value="highest">Highest rating</option>
+                  <option value="lowest">Lowest rating</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {([
+                ['all', 'All'],
+                ['photos', 'With photos'],
+                ['5', '5 ★'],
+                ['4', '4 ★'],
+                ['low', '3 ★ & below'],
+              ] as [RatingFilter, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setRatingFilter(key)}
+                  className={`${chipBase} ${ratingFilter === key ? chipOn : chipOff}`}
+                >
+                  {label} ({chipCounts[key]})
                 </button>
-              );
-            })}
+              ))}
+            </div>
+
+            {settings.showColorFilter && colorOptions.length > 1 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variation</p>
+                <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setColorFilter(null)}
+                    className={`${chipBase} ${colorFilter === null ? chipOn : chipOff}`}
+                  >
+                    All variations ({reviews.length})
+                  </button>
+                  {colorOptions.map((color) => {
+                    const count = reviews.filter((r) => r.variant_color?.trim().toLowerCase() === color.toLowerCase()).length;
+                    const active = colorFilter?.toLowerCase() === color.toLowerCase();
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setColorFilter(color)}
+                        className={`${chipBase} ${
+                          active
+                            ? chipOn
+                            : color.toLowerCase() === selectedColor?.toLowerCase()
+                            ? 'border-secondary/60 bg-card text-secondary'
+                            : chipOff
+                        }`}
+                      >
+                        {color} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {loading ? (
           <div className="flex flex-col gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full" />
+              <Skeleton key={i} className="h-28 w-full rounded-2xl" />
             ))}
           </div>
-        ) : filteredReviews.length === 0 ? (
-          colorFilter ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No reviews yet for {colorFilter}.{' '}
-              <button type="button" onClick={() => setColorFilter(null)} className="text-primary underline underline-offset-2">
-                Show all colours
+        ) : sortedReviews.length === 0 ? (
+          reviews.length > 0 ? (
+            <div className="rounded-2xl border border-dashed border-border/60 bg-card p-8 text-center text-sm text-muted-foreground">
+              No reviews match these filters.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setRatingFilter('all');
+                  setColorFilter(null);
+                }}
+                className="font-semibold text-primary underline underline-offset-2"
+              >
+                Clear filters
               </button>
-            </p>
+            </div>
           ) : null
         ) : (
-          <ul className="flex flex-col divide-y divide-border/60">
-            {filteredReviews.map((r) => (
-              <li key={r.id} className="rounded-lg py-4 transition-colors hover:bg-secondary/[0.04]">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-xs font-semibold text-primary-foreground shadow-sm">
-                    {initials(r.customer_name)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{firstName(r.customer_name)}</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 px-2 py-0.5 text-xs font-semibold text-white shadow-sm">
-                        {r.rating.toFixed(1)}
-                        <Star className="h-3 w-3 fill-white" />
-                      </span>
-                      {r.variant_color && (
-                        <span className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                          {r.variant_color}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Posted on{' '}
-                      {new Date(r.created_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </p>
+          <>
+            <ul className="flex flex-col gap-3 sm:gap-4">
+              {visibleReviews.map((r) => (
+                <ReviewCard
+                  key={r.id}
+                  r={r}
+                  featured={featuredSet.has(r.id)}
+                  helpful={!!markedHelpful[r.id]}
+                  helpfulCount={helpfulVotes[r.id] ?? 0}
+                  onToggleHelpful={() => toggleHelpful(r.id)}
+                  onOpenPhoto={(src) => openPhoto(r.id, src)}
+                />
+              ))}
+            </ul>
 
-                    {r.title && <p className="mt-2 text-sm font-semibold">{r.title}</p>}
-                    {r.comment && (
-                      <p className="mt-1 text-sm leading-relaxed text-foreground/80">{r.comment}</p>
-                    )}
-
-                    {r.photos && r.photos.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {r.photos.map((src, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => setLightboxSrc(toPublicMediaUrl(src) || src)}
-                            className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-border/60"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={reviewThumbUrl(src)}
-                              alt={`Photo from ${firstName(r.customer_name)}'s review`}
-                              width={64}
-                              height={64}
-                              loading="lazy"
-                              decoding="async"
-                              onError={(e) => {
-                                // Old photos have no -sm.webp until the Resize
-                                // backfill runs -- fall back to the original once.
-                                const img = e.currentTarget;
-                                if (img.dataset.fallback) return;
-                                img.dataset.fallback = '1';
-                                img.src = toPublicMediaUrl(src) || src;
-                              }}
-                              className="h-full w-full object-cover"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {r.verified_purchase && (
-                        <span className="relative inline-flex animate-in fade-in zoom-in items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 duration-500 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400">
-                          <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                            <CheckCircle2 className="relative h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                          </span>
-                          Verified Purchase
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleHelpful(r.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all duration-200 active:scale-95 ${
-                          markedHelpful[r.id]
-                            ? 'border-primary/40 bg-primary/10 text-primary'
-                            : 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary'
-                        }`}
-                      >
-                        <ThumbsUp
-                          className={`h-3 w-3 transition-transform duration-200 ${
-                            markedHelpful[r.id] ? 'fill-primary scale-110' : ''
-                          }`}
-                        />
-                        Helpful{helpfulVotes[r.id] ? ` (${helpfulVotes[r.id]})` : ''}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+            <div className="flex flex-col items-center gap-2 pt-1">
+              <p className="text-xs text-muted-foreground">
+                Showing {visibleReviews.length} of {sortedReviews.length} review{sortedReviews.length === 1 ? '' : 's'}
+              </p>
+              {remaining > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setVisibleCount((c) => c + settings.loadMoreCount)}
+                  className="w-full rounded-full border-primary/40 px-8 font-semibold text-primary hover:bg-primary/5 sm:w-auto"
+                >
+                  Load more reviews ({remaining} more)
+                </Button>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      {lightboxSrc && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxSrc(null)}
-        >
-          <button
-            type="button"
-            aria-label="Close photo"
-            onClick={() => setLightboxSrc(null)}
-            className="absolute right-4 top-4 rounded-full bg-background/20 p-2 text-white hover:bg-background/30"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightboxSrc}
-            alt="Customer review photo enlarged"
-            className="max-h-[85vh] max-w-full rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {lightboxIndex !== null && allPhotos.length > 0 && (
+        <PhotoLightbox
+          items={allPhotos}
+          index={Math.min(lightboxIndex, allPhotos.length - 1)}
+          onIndex={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
   );
