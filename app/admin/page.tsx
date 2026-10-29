@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminShell, { type AdminSection } from '@/components/admin/admin-shell';
 import ProductsPanel from '@/components/admin/products-panel';
-import OrdersPanel from '@/components/admin/orders-panel';
+import OrdersWithLegacy from '@/components/admin/orders-with-legacy';
 import CategoriesPanel from '@/components/admin/categories-panel';
 import PriceRangeFiltersPanel from '@/components/admin/price-range-filters-panel';
 import CollectionsPanel from '@/components/admin/collections-panel';
@@ -50,7 +50,7 @@ const PANELS: Record<AdminSection, React.ComponentType> = {
   collections: CollectionsPanel,
   blog: BlogPanel,
   reviews: ReviewsPanel,
-  orders: OrdersPanel,
+  orders: OrdersWithLegacy,
   customers: CustomersPanel,
   'woocommerce-import': WooCommerceImportPanel,
   returns: ReturnsPanel,
