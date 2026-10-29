@@ -7,6 +7,7 @@
 //           sirf READ karke SKU mapping bhi check karta hai.
 // --write   : asli import (reviews insert + photos upload).
 // --limit=N : sirf pehle N reviews (chhota test).
+// --only=ID,ID : sirf ye comment IDs (jaise --only=4,1611 -> ek bina photo, ek photo wala).
 // --photos=DIR : review photos folder (default C:\backup\feedcheck\review_photos,
 //                usme _map.csv hona chahiye: comment id -> file name).
 //
@@ -35,6 +36,8 @@ const DUMP = args.find((a) => !a.startsWith('--'));
 const WRITE = args.includes('--write');
 const limitArg = args.find((a) => a.startsWith('--limit='));
 const LIMIT = limitArg ? parseInt(limitArg.split('=')[1], 10) : 0;
+const onlyArg = args.find((a) => a.startsWith('--only='));
+const ONLY = onlyArg ? new Set(onlyArg.slice('--only='.length).split(',').map((x) => x.trim()).filter(Boolean)) : null;
 const photosArg = args.find((a) => a.startsWith('--photos='));
 const PHOTOS_DIR = photosArg ? photosArg.slice('--photos='.length) : 'C:\\backup\\feedcheck\\review_photos';
 
@@ -120,11 +123,13 @@ function asObj(r, defCols) {
 
 // Pass 1: approved comments
 const comments = new Map(); // id -> {postId, name, date, content, parent}
+const allStatus = new Map(); // har comment ka status (sirf diagnostics ke liye)
 let totalComments = 0;
 for (const r of rows('comments')) {
   if (r.vals.length < 15 && !r.cols) continue;
   const o = asObj(r, COMMENTS_COLS);
   totalComments++;
+  allStatus.set(o.comment_ID, { approved: o.comment_approved, type: o.comment_type, parent: o.comment_parent, post: o.comment_post_ID });
   if (o.comment_approved !== '1') continue;
   comments.set(o.comment_ID, {
     id: o.comment_ID, postId: o.comment_post_ID, name: (o.comment_author || '').trim(),
@@ -136,11 +141,16 @@ console.log('wp_comments rows:', totalComments, '| approved:', comments.size);
 
 // Pass 2: rating / verified meta
 const rating = new Map(), verified = new Map();
+// Review photos ka link: in meta_keys me photo (attachment) ki WordPress ID hoti hai.
+// (find-review-photo-links.mjs se confirm hua: reviewx_attachments, ivole_review_image2)
+const PHOTO_META_KEYS = new Set(['reviewx_attachments', 'ivole_review_image2']);
+const photoMeta = []; // {cid, val}
 for (const r of rows('commentmeta')) {
   const o = asObj(r, COMMENTMETA_COLS);
   if (!comments.has(o.comment_id)) continue;
   if (o.meta_key === 'rating') rating.set(o.comment_id, parseInt(o.meta_value, 10));
   else if (o.meta_key === 'verified') verified.set(o.comment_id, o.meta_value === '1');
+  else if (PHOTO_META_KEYS.has(o.meta_key) && o.meta_value && o.meta_value.length < 5000) photoMeta.push({ cid: o.comment_id, val: o.meta_value });
 }
 
 // Review = approved + rating meta wala. (Admin replies / blog comments me rating nahi hoti.)
@@ -172,6 +182,7 @@ function parseCsv(s) {
 }
 
 const photosByComment = new Map(); // comment id -> [file names]
+const fileByAttachment = new Map(); // photo (attachment) post ID -> local file name
 const mapFile = path.join(PHOTOS_DIR, '_map.csv');
 let missingPhotoFiles = 0;
 if (fs.existsSync(mapFile)) {
@@ -203,10 +214,19 @@ if (fs.existsSync(mapFile)) {
       if (f && fs.existsSync(path.join(PHOTOS_DIR, f))) { found = f; break; }
     }
     if (!found) { missingPhotoFiles++; continue; }
-    if (!photosByComment.has(cid)) photosByComment.set(cid, []);
-    photosByComment.get(cid).push(found);
+    fileByAttachment.set(cid, found); // pehla column = attachment post ID (comment ID nahi)
   }
-  console.log('Photos map: reviews with photos =', photosByComment.size, '| map me file folder me nahi mili =', missingPhotoFiles);
+  // Attachment ID -> review (comment) : commentmeta se
+  for (const pm of photoMeta) {
+    const nums = pm.val.match(/\d+/g) || [];
+    for (const nn of nums) {
+      const f = fileByAttachment.get(nn);
+      if (!f) continue;
+      if (!photosByComment.has(pm.cid)) photosByComment.set(pm.cid, []);
+      if (!photosByComment.get(pm.cid).includes(f)) photosByComment.get(pm.cid).push(f);
+    }
+  }
+  console.log('Photos map: photos =', fileByAttachment.size, '| approved reviews se juda =', photosByComment.size, '| map me file folder me nahi mili =', missingPhotoFiles);
 } else {
   console.log('NOTE: _map.csv nahi mili (' + mapFile + '), photos skip honge.');
 }
@@ -259,7 +279,8 @@ for (const r of reviews) {
   }
   plan.push({ ...r, rating: rt, sku, productId: HAVE_SB ? skuToProduct.get(sku.toLowerCase()) : null });
 }
-const todo = LIMIT > 0 ? plan.slice(0, LIMIT) : plan;
+const todo = ONLY ? plan.filter((p) => ONLY.has(p.id)) : LIMIT > 0 ? plan.slice(0, LIMIT) : plan;
+if (ONLY) console.log('--only: maange gaye', ONLY.size, 'comment IDs, plan me mile', todo.length);
 
 console.log('\n=== Plan ===');
 console.log('Import ke liye ready:', plan.length, LIMIT ? `(is run me sirf ${todo.length}, --limit)` : '');
@@ -269,10 +290,36 @@ for (const [k, v] of Object.entries(skipped)) {
 console.log('Photos wale reviews (ready me se):', todo.filter((t) => photosByComment.has(t.id)).length);
 console.log('Verified (dump ke meta se):', todo.filter((t) => verified.get(t.id)).length);
 
+// Photo wale reviews me se kaun plan me nahi?  (sirf IDs aur status, koi customer data nahi)
+if (photosByComment.size) {
+  const inPlan = new Set(plan.map((p) => p.id));
+  const why = {};
+  const sample = [];
+  for (const cid of photosByComment.keys()) {
+    let w;
+    const st = allStatus.get(cid);
+    if (inPlan.has(cid)) w = 'plan_me_hai';
+    else if (!st) w = 'dump_ke_comments_me_nahi';
+    else if (st.approved !== '1') w = 'approved_nahi(' + st.approved + ')';
+    else if (!rating.has(cid)) w = 'approved_par_rating_meta_nahi';
+    else w = 'skip_hua(sku/rating)';
+    why[w] = (why[w] || 0) + 1;
+    if (sample.length < 10) sample.push(cid + ':' + w + (st ? ' type=' + st.type + ' post=' + st.post : ''));
+  }
+  console.log('\n=== Photo wale ' + photosByComment.size + ' reviews ka status ===');
+  for (const [k, v] of Object.entries(why)) console.log('  ' + k + ':', v);
+  console.log('  namune:', sample.join(' | '));
+}
+
 if (!WRITE) {
   console.log('\nDRY RUN: kuch likha nahi gaya. Asli import ke liye --write lagao (pehle --write --limit=5).');
   for (const t of todo.slice(0, 15)) {
     console.log(`  comment ${t.id} | ${t.rating}* | sku ${t.sku} | photos ${(photosByComment.get(t.id) || []).join(' ; ') || '-'}`);
+  }
+  const withPhotos = todo.filter((t) => photosByComment.has(t.id));
+  if (withPhotos.length) {
+    console.log('\nPhotos wale reviews (comment | rating | sku | photos ki ginti):');
+    for (const t of withPhotos.slice(0, 30)) console.log(`  comment ${t.id} | ${t.rating}* | sku ${t.sku} | ${photosByComment.get(t.id).length} photo(s)`);
   }
   process.exit(0);
 }
