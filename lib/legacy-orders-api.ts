@@ -25,6 +25,7 @@ export type LegacyOrderListRow = {
   city: string | null;
   state: string | null;
   first_item: string | null;
+  first_item_image: string | null;
   item_count: number;
 };
 
@@ -65,6 +66,52 @@ function fullName(a?: AddressRow | null): string {
 
 function pickAddress(rows: AddressRow[], type: 'billing' | 'shipping'): AddressRow | undefined {
   return rows.find((r) => (r.address_type ?? '').toLowerCase() === type);
+}
+
+// Old orders do not store product photos. The old WooCommerce product ID is
+// mapped to the new product slug via settings.feed_idmap.parents (the same map
+// the Google feed uses), then we borrow products.images[0]. SELECT only, and
+// best-effort: images are optional and must never break the order view.
+async function loadImagesByOldProductId(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  oldIds: string[]
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const wanted = new Set(oldIds.map((i) => (i ?? '').trim()).filter(Boolean));
+  if (wanted.size === 0) return out;
+
+  const { data: mrow, error: mErr } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'feed_idmap')
+    .maybeSingle();
+  if (mErr) return out;
+  const parents: Record<string, unknown> = ((mrow as any)?.value ?? {}).parents ?? {};
+
+  const slugByOldId = new Map<string, string>();
+  for (const [slug, oldId] of Object.entries(parents)) {
+    const k = String(oldId ?? '').trim();
+    if (wanted.has(k) && !slugByOldId.has(k)) slugByOldId.set(k, slug);
+  }
+  if (slugByOldId.size === 0) return out;
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('slug, images')
+    .in('slug', Array.from(new Set(slugByOldId.values())));
+  if (error) return out;
+
+  const imageBySlug = new Map<string, string>();
+  for (const p of data ?? []) {
+    const imgs = (p as any).images;
+    const first = Array.isArray(imgs) && imgs.length > 0 ? String(imgs[0]) : '';
+    if (first) imageBySlug.set(String((p as any).slug), first);
+  }
+  slugByOldId.forEach((slug, oldId) => {
+    const img = imageBySlug.get(slug);
+    if (img) out.set(oldId, img);
+  });
+  return out;
 }
 
 export async function getLegacyStatusStats(): Promise<LegacyStatusStat[]> {
@@ -128,11 +175,28 @@ export async function listLegacyOrders(opts: {
     addrByOrder.get(k)!.push(a);
   }
   const itemsByOrder = new Map<number, string[]>();
+  const firstItemIdByOrder = new Map<number, number>();
   for (const it of itemsRes.data ?? []) {
     const k = Number((it as any).order_id);
     if (!itemsByOrder.has(k)) itemsByOrder.set(k, []);
     itemsByOrder.get(k)!.push(String((it as any).order_item_name ?? ''));
+    if (!firstItemIdByOrder.has(k)) firstItemIdByOrder.set(k, Number((it as any).order_item_id));
   }
+
+  // First item's photo (best effort): old _product_id -> new slug -> images[0]
+  const oldIdByItemId = new Map<number, string>();
+  const firstIds = Array.from(firstItemIdByOrder.values());
+  if (firstIds.length > 0) {
+    const { data: codeRows } = await supabase
+      .from('legacy_wc_order_itemmeta')
+      .select('order_item_id, meta_value')
+      .in('order_item_id', firstIds)
+      .eq('meta_key', '_product_id');
+    for (const r of codeRows ?? []) {
+      oldIdByItemId.set(Number((r as any).order_item_id), String((r as any).meta_value ?? '').trim());
+    }
+  }
+  const imageByOldId = await loadImagesByOldProductId(supabase, Array.from(oldIdByItemId.values()));
 
   const orders: LegacyOrderListRow[] = ids
     .map((id) => {
@@ -155,6 +219,11 @@ export async function listLegacyOrders(opts: {
         city: billing?.city || shipping?.city || null,
         state: billing?.state || shipping?.state || null,
         first_item: items[0] ?? null,
+        first_item_image: (() => {
+          const fid = firstItemIdByOrder.get(id);
+          const oldId = fid != null ? oldIdByItemId.get(fid) : '';
+          return oldId ? imageByOldId.get(oldId) ?? null : null;
+        })(),
         item_count: items.length,
       } as LegacyOrderListRow;
     })
@@ -219,6 +288,7 @@ export type LegacyOrderDetail = {
     color: string | null;
     size: string | null;
     product_code: string | null;
+    image_url: string | null;
   }[];
   fees: { name: string; total: number; tax: number }[];
   shipping_lines: { name: string; method_id: string | null; cost: number; tax: number }[];
@@ -334,6 +404,7 @@ export async function getLegacyOrderDetail(id: number): Promise<LegacyOrderDetai
           color: meta['pa_color'] || null,
           size: meta['pa_size'] || null,
           product_code: meta['Product Code'] || null,
+          image_url: null,
         });
         break;
       case 'fee':
@@ -361,6 +432,14 @@ export async function getLegacyOrderDetail(id: number): Promise<LegacyOrderDetai
       default:
         break;
     }
+  }
+
+  const imageByOldId = await loadImagesByOldProductId(
+    supabase,
+    detail.items.map((i) => i.product_id ?? '')
+  );
+  for (const i of detail.items) {
+    i.image_url = i.product_id ? imageByOldId.get(i.product_id.trim()) ?? null : null;
   }
 
   return detail;
