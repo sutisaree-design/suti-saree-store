@@ -23,6 +23,52 @@ import type {
 
 const PAGE_SIZE = 25;
 
+// ---- Manual outreach (nothing is ever sent automatically) -----------------
+// These only open the admin's own WhatsApp / mail app with a pre-filled
+// message. The admin reads it and presses Send themselves.
+type MsgTemplate = { id: string; label: string; subject: string; body: string };
+
+const MSG_TEMPLATES: MsgTemplate[] = [
+  {
+    id: 'thanks',
+    label: 'Thank you + new arrivals',
+    subject: 'Thank you from Sutisaree - new sarees for you',
+    body:
+      'Namaste {name} ji,\n\nThank you for shopping with Sutisaree earlier. We have moved to our new website and have fresh handloom and cotton sarees for you.\n\nSee new arrivals: https://sutisaree.com\n\nReply STOP if you do not want messages from us.',
+  },
+  {
+    id: 'offer',
+    label: 'Special offer',
+    subject: 'A special offer for you from Sutisaree',
+    body:
+      'Namaste {name} ji,\n\nAs a valued Sutisaree customer, we have a special offer for you on our new website.\n\nShop now: https://sutisaree.com\n\nReply STOP if you do not want messages from us.',
+  },
+  {
+    id: 'feedback',
+    label: 'Feedback / review',
+    subject: 'How was your Sutisaree saree?',
+    body:
+      'Namaste {name} ji,\n\nYou ordered "{item}" from us. We hope you loved it! If you have a minute, please reply with your feedback or a photo - it helps us a lot.\n\nReply STOP if you do not want messages from us.',
+  },
+  { id: 'custom', label: 'Custom (write your own)', subject: 'Message from Sutisaree', body: 'Namaste {name} ji,\n\n' },
+];
+
+function fillTemplate(text: string, o: { name: string; item: string | null }): string {
+  const first = (o.name && o.name !== '—' ? o.name : 'Customer').trim().split(/\s+/)[0];
+  return text.replace(/\{name\}/g, first).replace(/\{item\}/g, o.item || 'your saree');
+}
+
+// Indian numbers only -> digits for wa.me (91XXXXXXXXXX). Null if unusable.
+function waDigits(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const d = raw.replace(/\D/g, '');
+  if (d.length === 10) return `91${d}`;
+  if (d.length === 11 && d.startsWith('0')) return `91${d.slice(1)}`;
+  if (d.length === 12 && d.startsWith('91')) return d;
+  if (d.length === 13 && d.startsWith('091')) return `91${d.slice(3)}`;
+  return null;
+}
+
 const STATUS_BORDER_COLOR: Record<string, string> = {
   completed: 'border-l-green-600',
   processing: 'border-l-sky-500',
@@ -108,7 +154,17 @@ export default function LegacyOrdersPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [tplId, setTplId] = useState<string>(MSG_TEMPLATES[0].id);
+  const [tplSubject, setTplSubject] = useState<string>(MSG_TEMPLATES[0].subject);
+  const [tplBody, setTplBody] = useState<string>(MSG_TEMPLATES[0].body);
   const reqSeq = useRef(0);
+
+  const pickTemplate = (id: string) => {
+    const t = MSG_TEMPLATES.find((x) => x.id === id) ?? MSG_TEMPLATES[0];
+    setTplId(t.id);
+    setTplSubject(t.subject);
+    setTplBody(t.body);
+  };
 
   // Debounce the search box.
   useEffect(() => {
@@ -178,7 +234,7 @@ export default function LegacyOrdersPanel() {
     <div className="grid gap-6">
       <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>Old WooCommerce site orders - read only. No emails or WhatsApp are ever sent for these.</span>
+        <span>Old WooCommerce site orders - read only. Nothing is sent automatically. The WhatsApp / Email buttons only open your own app with a pre-filled message; you press Send yourself.</span>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
@@ -194,6 +250,34 @@ export default function LegacyOrdersPanel() {
           <p className="text-xs text-muted-foreground">Matching current search / filter</p>
           <p className="mt-2 text-lg font-semibold sm:text-2xl">{total.toLocaleString('en-IN')}</p>
         </div>
+      </div>
+
+      <div className="grid gap-2 rounded-lg border border-border/60 bg-card p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold">Message to send (manual)</p>
+          <select
+            value={tplId}
+            onChange={(e) => pickTemplate(e.target.value)}
+            className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+          >
+            {MSG_TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">Use {'{name}'} and {'{item}'} - filled in for each customer.</span>
+        </div>
+        <Input value={tplSubject} onChange={(e) => setTplSubject(e.target.value)} placeholder="Email subject" />
+        <textarea
+          value={tplBody}
+          onChange={(e) => setTplBody(e.target.value)}
+          rows={5}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        />
+        <p className="text-xs text-muted-foreground">
+          Keep messages relevant and always include a way to opt out. Sending the same promo to many people quickly can get your WhatsApp number restricted - send in small batches.
+        </p>
       </div>
 
       <div className="flex flex-col gap-3">
@@ -280,7 +364,9 @@ export default function LegacyOrdersPanel() {
                 </td>
               </tr>
             ) : (
-              rows.map((o) => <LegacyRow key={o.id} order={o} onView={setOpenId} dim={loading} />)
+              rows.map((o) => (
+                <LegacyRow key={o.id} order={o} onView={setOpenId} dim={loading} tplSubject={tplSubject} tplBody={tplBody} />
+              ))
             )}
           </tbody>
         </table>
@@ -342,11 +428,22 @@ function LegacyRow({
   order,
   onView,
   dim,
+  tplSubject,
+  tplBody,
 }: {
   order: LegacyOrderListRow;
   onView: (id: number) => void;
   dim: boolean;
+  tplSubject: string;
+  tplBody: string;
 }) {
+  const ctx = { name: order.customer_name, item: order.first_item };
+  const digits = waDigits(order.customer_phone);
+  const body = fillTemplate(tplBody, ctx);
+  const waUrl = digits ? `https://wa.me/${digits}?text=${encodeURIComponent(body)}` : null;
+  const mailUrl = order.customer_email
+    ? `mailto:${order.customer_email}?subject=${encodeURIComponent(fillTemplate(tplSubject, ctx))}&body=${encodeURIComponent(body)}`
+    : null;
   const key = cleanStatus(order.status);
   const more = order.item_count > 1 ? ` +${order.item_count - 1} more` : '';
   return (
@@ -383,9 +480,39 @@ function LegacyRow({
         <StatusBadge status={order.status} />
       </td>
       <td className="px-4 py-3 align-top">
-        <Button size="sm" onClick={() => onView(order.id)}>
-          View
-        </Button>
+        <div className="flex flex-col items-start gap-1.5">
+          <Button size="sm" onClick={() => onView(order.id)}>
+            View
+          </Button>
+          <div className="flex gap-1.5">
+            {waUrl ? (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md bg-[#25D366] px-2 py-1 text-xs font-medium text-white hover:opacity-90"
+              >
+                WhatsApp
+              </a>
+            ) : (
+              <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground" title="No valid phone number">
+                WhatsApp
+              </span>
+            )}
+            {mailUrl ? (
+              <a
+                href={mailUrl}
+                className="rounded-md border border-border bg-card px-2 py-1 text-xs font-medium hover:bg-muted"
+              >
+                Email
+              </a>
+            ) : (
+              <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground" title="No email">
+                Email
+              </span>
+            )}
+          </div>
+        </div>
       </td>
     </tr>
   );
