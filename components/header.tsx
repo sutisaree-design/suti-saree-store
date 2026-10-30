@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useMemo, useRef, useEffect, useCallback, FormEvent } from 'react';
 import { Search, ShoppingBag, Menu, User, Heart, ArrowLeft, Camera, Loader2, Clock, Sparkles, ChevronRight, ChevronDown, BookOpen, Info, Users, Phone } from 'lucide-react';
 import { useCart, useCategories, loadProductsCached } from '@/lib/cart-context';
+import { BrandLogo } from '@/lib/brand-context';
 import { useAuth } from '@/lib/auth-context';
 import { getCheckoutReturnPath, isCheckoutReturnFromBuyNow, clearCheckoutReturnBuyNowFlag } from '@/lib/checkout-return';
 import { rankProductIdsByImage, createSearchThumbnail } from '@/lib/image-search';
@@ -536,7 +537,11 @@ export default function Header() {
                   onClick={() => setMobileOpen(false)}
                   className="flex items-center gap-0"
                 >
-                  <span className="font-serif text-2xl font-bold text-primary-foreground">Sutisaree</span>
+                  <BrandLogo
+                    onDark
+                    className="h-10 max-w-[200px]"
+                    fallback={<span className="font-serif text-2xl font-bold text-primary-foreground">Sutisaree</span>}
+                  />
                 </Link>
                 <span className="text-[10px] font-medium uppercase tracking-[0.25em] text-primary-foreground/70">
                   Where Craft Meets Culture
@@ -688,9 +693,13 @@ export default function Header() {
           )}
 
           <Link href="/" className="flex shrink-0 items-center gap-0">
-            <span className="whitespace-nowrap font-serif text-lg font-bold tracking-tight text-primary sm:text-2xl">
-              Sutisaree
-            </span>
+            <BrandLogo
+              fallback={
+                <span className="whitespace-nowrap font-serif text-lg font-bold tracking-tight text-primary sm:text-2xl">
+                  Sutisaree
+                </span>
+              }
+            />
           </Link>
         </div>
 

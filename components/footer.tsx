@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Instagram, Facebook, Youtube, Twitter, Linkedin, MessageCircle, Mail, Phone } from 'lucide-react';
 import NewsletterSignup from './newsletter-signup';
 import { useCart } from '@/lib/cart-context';
+import { BrandLogo } from '@/lib/brand-context';
 import { markCheckoutEntry } from '@/lib/checkout-return';
 import { fetchSocialLinks, fetchStoreInfo, SocialLinks, StoreInfo } from '@/lib/settings-api';
 
@@ -35,7 +36,11 @@ export default function Footer() {
     <footer className="mt-16 border-t border-border/60 bg-primary text-primary-foreground">
       <div className="container-boutique grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-5">
         <div>
-          <h3 className="font-serif text-2xl font-bold text-secondary">Sutisaree</h3>
+          <BrandLogo
+            onDark
+            className="h-10 max-w-[200px]"
+            fallback={<h3 className="font-serif text-2xl font-bold text-secondary">Sutisaree</h3>}
+          />
           <p className="mt-3 text-sm text-primary-foreground/80">
             Handwoven ethnic wear from master artisans across India. Crafted with
             love, delivered with care.

@@ -10,6 +10,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 // manifest. Same source (Admin > Marketing > SEO > favicon_url) and same
 // brand-monogram fallback as app/icon.tsx, just rendered bigger.
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 async function getFaviconUrl(): Promise<string> {
   try {

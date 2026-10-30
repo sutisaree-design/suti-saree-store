@@ -31,6 +31,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import BrandIdentityCard from './brand-identity-card';
 
 type Bucket = 'product-images' | 'product-videos' | 'review-images' | 'support-attachments';
 type MediaType = 'image' | 'video' | 'other';
@@ -307,6 +308,9 @@ export default function MediaLibraryPanel() {
 
   return (
     <div className="space-y-4">
+      {/* Logo + favicon (upload or pick from the library below) */}
+      <BrandIdentityCard onChanged={() => load({ refresh: true })} />
+
       {/* Top bar */}
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center">
         <div className="relative flex-1">

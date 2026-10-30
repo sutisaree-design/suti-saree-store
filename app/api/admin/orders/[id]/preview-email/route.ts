@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyAdminToken, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { sendEmail } from '@/lib/email';
+import { sendEmail, applyBrandToEmailHtml } from '@/lib/email';
 import {
   orderShippedEmail,
   orderStatusUpdateEmail,
@@ -162,7 +162,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: 'Unknown email type or order not found' }, { status: 400 });
   }
 
-  return new NextResponse(result.html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  return new NextResponse(await applyBrandToEmailHtml(result.html), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {

@@ -5,6 +5,7 @@ import { getServerSupabase } from '@/lib/supabase-server';
 // from the Next.js icon-convention files. This is the larger (512x512)
 // size Chrome/Android use for the splash screen / app-drawer icon.
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 async function getFaviconUrl(): Promise<string> {
   try {

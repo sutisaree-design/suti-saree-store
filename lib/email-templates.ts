@@ -50,9 +50,9 @@ function wrapper(
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:100%; background:#ffffff; border-radius:10px; overflow:hidden; border:1px solid #ecdfd2; box-shadow: 0 2px 10px rgba(92,42,20,0.06);">
             <tr>
               <td style="background:#fffaf5; padding: 28px 24px 22px; text-align:center; border-bottom: 1px solid #ecdfd2;">
-                <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight:bold;">
+                <!--brand-logo--><div style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight:bold;">
                   <span style="color:${LOGO_PRIMARY};">Sutisaree</span>
-                </div>
+                </div><!--/brand-logo-->
                 <div style="margin: 8px auto 0; width: 48px; border-top: 2px solid ${LOGO_SECONDARY};"></div>
                 <div style="margin-top: 8px; color: #9a8f87; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">Handwoven Ethnic Wear</div>
               </td>

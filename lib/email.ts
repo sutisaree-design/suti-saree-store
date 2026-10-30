@@ -17,6 +17,7 @@
 // fell through to the (usually unset) env-var fallback and failed with
 // "No sender email configured" even when the admin had saved settings.
 import { getSupabaseAdmin } from './supabase-admin';
+import { getBrandSettings } from './brand-server';
 
 type SendEmailArgs = {
   to: string;
@@ -134,13 +135,32 @@ async function sendViaZeptoMail(cfg: ResolvedEmailConfig, args: SendEmailArgs) {
   return { success: true as const, data };
 }
 
+/**
+ * Swaps the text wordmark in every branded email (marked with
+ * <!--brand-logo-->…<!--/brand-logo-->) for the logo image the admin set in
+ * Admin > Media > Brand identity. No logo set -> html is returned unchanged,
+ * so emails look exactly like before. Used by sendEmail() (every email in the
+ * app goes through it) and by the admin email preview.
+ */
+export async function applyBrandToEmailHtml(html: string): Promise<string> {
+  if (!html.includes('<!--brand-logo-->')) return html;
+  const { logo_url } = await getBrandSettings();
+  if (!logo_url) return html;
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
+  const img =
+    `<a href="${siteUrl}" style="text-decoration:none;"><img src="${logo_url}" alt="Sutisaree" height="52" ` +
+    `style="display:block; margin:0 auto; height:52px; width:auto; max-width:240px; border:0; outline:none;" /></a>`;
+  return html.replace(/<!--brand-logo-->[\s\S]*?<!--\/brand-logo-->/g, img);
+}
+
 export async function sendEmail(
-  { to, subject, html }: SendEmailArgs,
+  { to, subject, html: rawHtml }: SendEmailArgs,
   preResolvedConfig?: ResolvedEmailConfig
 ): Promise<SendEmailResult> {
   if (!to) {
     return { success: false, skipped: true, error: 'No recipient email address' };
   }
+  const html = await applyBrandToEmailHtml(rawHtml);
 
   // Batch callers (e.g. the WooCommerce drip job) pass their own
   // already-resolved config to skip the settings-table round-trip on

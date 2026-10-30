@@ -1,4 +1,5 @@
 import { getServerSupabase } from '@/lib/supabase-server';
+import { getBrandSettings } from '@/lib/brand-server';
 import { safeJsonLd } from '@/lib/json-ld';
 import { fetchHomeData } from '@/lib/home-data-server';
 import HomeClient from './home-client';
@@ -55,7 +56,7 @@ async function getHomeSeoData(): Promise<HomeSeoData> {
 }
 
 export default async function Home() {
-  const [data, homeData] = await Promise.all([getHomeSeoData(), fetchHomeData()]);
+  const [data, homeData, brand] = await Promise.all([getHomeSeoData(), fetchHomeData(), getBrandSettings()]);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -64,7 +65,8 @@ export default async function Home() {
         '@type': 'Organization',
         name: data.name,
         url: SITE_URL,
-        logo: `${SITE_URL}/icon`,
+        // Logo from Admin > Media > Brand identity (falls back to the favicon route).
+        logo: brand.logo_url || `${SITE_URL}/icon`,
         ...(data.email || data.phone
           ? {
               contactPoint: {

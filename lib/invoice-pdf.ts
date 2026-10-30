@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFImage, PDFPage } from 'pdf-lib';
+import { getBrandSettings } from './brand-server';
 
 interface InvoiceOrderItem {
   product_name: string;
@@ -217,13 +218,29 @@ export async function generateInvoicePdf(
   const knownSuffix = ['Handlooms', 'Handloom'].find((s) => brandName.toLowerCase().endsWith(s.toLowerCase()));
   const brandFirst = knownSuffix ? brandName.slice(0, brandName.length - knownSuffix.length) : brandName;
   const brandSecond = knownSuffix ? brandName.slice(brandName.length - knownSuffix.length) : '';
-  draw(brandFirst, margin, y, { size: 22, f: serifBold, color: PRIMARY });
-  draw(brandSecond, margin + serifBold.widthOfTextAtSize(brandFirst, 22), y, {
-    size: 22,
-    f: serifBold,
-    color: SECONDARY,
-  });
-  y -= 18;
+  // Uploaded logo (Admin > Media > Brand identity) replaces the text wordmark;
+  // falls back to the wordmark if none is set or the image can't be embedded.
+  const logoImage = await tryEmbedRemoteImage(doc, (await getBrandSettings()).logo_url);
+  if (logoImage) {
+    const maxH = 34;
+    const maxW = 170;
+    const scale = Math.min(maxH / logoImage.height, maxW / logoImage.width);
+    page.drawImage(logoImage, {
+      x: margin,
+      y: y - 8,
+      width: logoImage.width * scale,
+      height: logoImage.height * scale,
+    });
+    y -= 22;
+  } else {
+    draw(brandFirst, margin, y, { size: 22, f: serifBold, color: PRIMARY });
+    draw(brandSecond, margin + serifBold.widthOfTextAtSize(brandFirst, 22), y, {
+      size: 22,
+      f: serifBold,
+      color: SECONDARY,
+    });
+    y -= 18;
+  }
   if (store.address) {
     draw(store.address, margin, y, { size: 8.5, color: MUTED });
     y -= 11;

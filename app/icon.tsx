@@ -6,6 +6,9 @@ import { getServerSupabase } from '@/lib/supabase-server';
 // Google Search).
 export const size = { width: 48, height: 48 };
 export const contentType = 'image/png';
+// Read the favicon from settings on every request, so a favicon changed in
+// Admin > Media > Brand identity shows up without redeploying.
+export const dynamic = 'force-dynamic';
 
 async function getFaviconUrl(): Promise<string> {
   try {

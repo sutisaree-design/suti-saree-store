@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import { Inter, Playfair_Display } from 'next/font/google';
 import Script from 'next/script';
 import Providers from '@/components/providers';
+import { BrandProvider } from '@/lib/brand-context';
+import { getBrandSettings } from '@/lib/brand-server';
 import AnalyticsScripts from '@/components/analytics-scripts';
 import BlurPlaceholderSync from '@/components/blur-placeholder-sync';
 import GoogleCustomerReviewsBadge from '@/components/analytics/google-customer-reviews-badge';
@@ -196,6 +198,8 @@ export default async function RootLayout({
   // Banner / countdown / strips: read once on the server so they are in the
   // first HTML instead of popping in after hydration (layout shift).
   const chrome = await getStorefrontChromeSettings();
+  // Logo picked in Admin > Media > Brand identity (empty = text wordmark).
+  const brand = await getBrandSettings();
   // Responsive Images admin toggle (Admin > Settings). Read once per
   // request, then made available to lib/cloudflare-image-loader.js both
   // on the server (Node global, set below, before children render) and
@@ -267,6 +271,7 @@ export default async function RootLayout({
         {/* Google Customer Reviews badge (store rating). See
            components/analytics/google-customer-reviews-badge.tsx. */}
         <GoogleCustomerReviewsBadge enabled={analytics.gcr_badge_enabled} />
+        <BrandProvider logoUrl={brand.logo_url}>
         <Providers
           initialPaymentDiscount={initialPaymentDiscount}
           initialSiteBanner={chrome.siteBanner}
@@ -275,6 +280,7 @@ export default async function RootLayout({
         >
           {children}
         </Providers>
+        </BrandProvider>
       </body>
     </html>
   );

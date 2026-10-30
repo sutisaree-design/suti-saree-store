@@ -186,9 +186,9 @@ function header() {
   return `
     <tr>
       <td style="background:#fffaf5; padding: 22px 24px; text-align: center; border-bottom: 1px solid #eee2d8;">
-        <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight: bold; letter-spacing: 0.01em;">
+        <!--brand-logo--><span style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight: bold; letter-spacing: 0.01em;">
           <span style="color:${LOGO_GOLD};">Sutisaree</span>
-        </span>
+        </span><!--/brand-logo-->
       </td>
     </tr>`;
 }
