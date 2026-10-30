@@ -42,6 +42,7 @@ import {
   IndianRupee,
   Sparkles,
   Award,
+  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationBell from './notification-bell';
@@ -53,6 +54,7 @@ export type AdminSection =
   | 'price-filters'
   | 'collections'
   | 'blog'
+  | 'media'
   | 'reviews'
   | 'orders'
   | 'customers'
@@ -109,6 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
       { value: 'categories', label: 'Categories', icon: FolderTree },
       { value: 'price-filters', label: 'Price Filters', icon: IndianRupee },
       { value: 'collections', label: 'Collections', icon: Layers },
+      { value: 'media', label: 'Media', icon: FolderOpen },
       { value: 'blog', label: 'Blog', icon: Newspaper },
       { value: 'reviews', label: 'Reviews', icon: Star },
     ],

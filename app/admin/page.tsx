@@ -9,6 +9,7 @@ import CategoriesPanel from '@/components/admin/categories-panel';
 import PriceRangeFiltersPanel from '@/components/admin/price-range-filters-panel';
 import CollectionsPanel from '@/components/admin/collections-panel';
 import BlogPanel from '@/components/admin/blog-panel';
+import MediaLibraryPanel from '@/components/admin/media-library-panel';
 import ReviewsPanel from '@/components/admin/reviews-panel';
 import CouponsPanel from '@/components/admin/coupons-panel';
 import PromotionsPanel from '@/components/admin/promotions-panel';
@@ -48,6 +49,7 @@ const PANELS: Record<AdminSection, React.ComponentType> = {
   categories: CategoriesPanel,
   'price-filters': PriceRangeFiltersPanel,
   collections: CollectionsPanel,
+  media: MediaLibraryPanel,
   blog: BlogPanel,
   reviews: ReviewsPanel,
   orders: OrdersWithLegacy,
