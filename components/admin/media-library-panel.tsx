@@ -33,7 +33,7 @@ import {
 import { cn } from '@/lib/utils';
 import BrandIdentityCard from './brand-identity-card';
 
-type Bucket = 'product-images' | 'product-videos' | 'review-images' | 'support-attachments';
+type Bucket = 'product-images' | 'product-videos' | 'review-images' | 'support-attachments' | 'r2';
 type MediaType = 'image' | 'video' | 'other';
 
 interface MediaItem {
@@ -47,6 +47,7 @@ interface MediaItem {
   mime: string;
   createdAt: string | null;
   derived: boolean;
+  thumb?: string;
 }
 
 interface Counts {
@@ -65,6 +66,7 @@ interface ListResponse {
   totalPages: number;
   counts: Counts;
   truncated: boolean;
+  warnings?: string[];
   error?: string;
 }
 
@@ -74,6 +76,7 @@ const BUCKET_LABELS: Record<string, string> = {
   'product-videos': 'Product videos',
   'review-images': 'Review photos',
   'support-attachments': 'Support attachments',
+  r2: 'WordPress uploads (R2)',
 };
 
 const TYPE_TABS: { value: 'all' | MediaType; label: string }[] = [
@@ -108,9 +111,10 @@ function Thumb({ item, className }: { item: MediaItem; className?: string }) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={item.url}
+        src={item.thumb || item.url}
         alt={item.name}
         loading="lazy"
+        decoding="async"
         onError={() => setFailed(true)}
         className={cn('h-full w-full object-cover', className)}
       />
@@ -477,8 +481,14 @@ export default function MediaLibraryPanel() {
 
       {data?.truncated && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Library is very large — only the first 20,000 files per folder are listed. Use the search box or pick a
+          Library is very large — not every file is listed (limit: 20,000 per Supabase folder, 150,000 for WordPress uploads). Use the search box or pick a
           specific folder to narrow it down.
+        </p>
+      )}
+
+      {data?.warnings && data.warnings.length > 0 && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Some folders could not be loaded: {data.warnings.join(' · ')}
         </p>
       )}
 
@@ -668,7 +678,7 @@ export default function MediaLibraryPanel() {
               Delete {deleteTargets?.length === 1 ? 'this file' : `${deleteTargets?.length} files`} permanently?
             </DialogTitle>
             <DialogDescription>
-              The file and its resized copies are removed from storage. If a product, banner or blog post still uses
+              The file and its resized copies are removed from storage (for WordPress uploads: from Cloudflare R2). If a product, banner or blog post still uses
               it, that image will show as broken. This cannot be undone.
             </DialogDescription>
           </DialogHeader>

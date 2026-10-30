@@ -20,6 +20,7 @@ interface PickerItem {
   name: string;
   url: string;
   size: number;
+  thumb?: string;
 }
 
 /**
@@ -129,7 +130,7 @@ export default function MediaPickerDialog({
                     )}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.url} alt={item.name} loading="lazy" className="h-full w-full object-cover" />
+                    <img src={item.thumb || item.url} alt={item.name} loading="lazy" className="h-full w-full object-cover" />
                     {isSel && (
                       <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                         <Check className="h-3.5 w-3.5" />

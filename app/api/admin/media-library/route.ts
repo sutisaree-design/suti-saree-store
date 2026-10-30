@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-fulfillment-shared';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { canonicalMediaUrl, deleteFromStorage, type StorageBucket } from '@/lib/storage';
+import { ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { canonicalMediaUrl, deleteFromStorage, getR2Client, r2EnvPresent, type StorageBucket } from '@/lib/storage';
 
 // ---------------------------------------------------------------------
 // Admin Media Library (WordPress / WooCommerce style)
@@ -23,8 +24,17 @@ import { canonicalMediaUrl, deleteFromStorage, type StorageBucket } from '@/lib/
 // ---------------------------------------------------------------------
 
 export const dynamic = 'force-dynamic';
+// Listing a large R2 bucket (WordPress uploads) on a cold start can take a few seconds.
+export const maxDuration = 60;
 
 const BUCKETS: StorageBucket[] = ['product-images', 'product-videos', 'review-images', 'support-attachments'];
+
+const BUCKET_NAMES: Record<StorageBucket, string> = {
+  'product-images': 'Product images',
+  'product-videos': 'Product videos',
+  'review-images': 'Review photos',
+  'support-attachments': 'Support attachments',
+};
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'heif', 'svg']);
 const VIDEO_EXT = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv']);
@@ -32,8 +42,18 @@ const VIDEO_EXT = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv']);
 const MAX_FILES_PER_BUCKET = 20000;
 const CACHE_TTL_MS = 60_000;
 
+// "r2" = everything in the Cloudflare R2 bucket EXCEPT the four folders above
+// (those are just mirrors of the Supabase buckets and are already listed
+// through Supabase). This is where the old WordPress library lives
+// (wp-content/uploads/2018 … 2026, elementor/, etc.).
+type MediaBucket = StorageBucket | 'r2';
+const R2_MIRROR_PREFIXES = new Set<string>(BUCKETS.map((b) => `${b}/`));
+const MAX_FILES_R2 = 150000;
+const R2_CACHE_TTL_MS = 5 * 60_000;
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com').replace(/\/$/, '');
+
 export interface MediaItem {
-  bucket: StorageBucket;
+  bucket: MediaBucket;
   path: string;
   name: string;
   folder: string;
@@ -43,10 +63,12 @@ export interface MediaItem {
   mime: string;
   createdAt: string | null;
   derived: boolean;
+  /** Smaller preview URL when one exists (WordPress -300x300 style copies). */
+  thumb?: string;
 }
 
 type CacheEntry = { at: number; items: MediaItem[]; truncated: boolean };
-const cache = new Map<StorageBucket, CacheEntry>();
+const cache = new Map<MediaBucket, CacheEntry>();
 
 function extOf(name: string): string {
   const i = name.lastIndexOf('.');
@@ -68,7 +90,8 @@ function typeOf(name: string, mime: string): MediaItem['type'] {
 function isDerived(name: string): boolean {
   const ext = extOf(name);
   if (ext === 'avif') return true;
-  return /-(sm|md)\.[a-z0-9]+$/i.test(name);
+  // -sm / -md (our own uploads) and WordPress's -300x300 / -150x150 / -1024x683 copies.
+  return /-(sm|md)\.[a-z0-9]+$/i.test(name) || /-\d{2,4}x\d{2,4}\.[a-z0-9]+$/i.test(name);
 }
 
 function baseOf(path: string): string {
@@ -142,6 +165,130 @@ async function loadBucket(bucket: StorageBucket, refresh: boolean): Promise<Cach
   return entry;
 }
 
+// ---------------------------------------------------------------------
+// Cloudflare R2 listing (WordPress uploads etc.)
+//
+// A big bucket (tens of thousands of keys) is listed fast by splitting the
+// key space into folders (wp-content/uploads/<year>/<month>/ …) and listing
+// those in parallel instead of paging through one giant flat listing.
+// ---------------------------------------------------------------------
+function escapeRegExp(v: string): string {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function runPool<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+    while (next < tasks.length) {
+      const idx = next++;
+      await tasks[idx]();
+    }
+  });
+  await Promise.all(workers);
+}
+
+function r2UrlFor(key: string): string {
+  return `${SITE_URL}/media/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+async function listR2(): Promise<CacheEntry> {
+  const client = getR2Client();
+  const Bucket = process.env.R2_BUCKET_NAME as string;
+  const items: MediaItem[] = [];
+  let truncated = false;
+
+  const pushObject = (key: string, size: number, modified: Date | undefined) => {
+    if (!key || key.endsWith('/')) return;
+    const name = key.slice(key.lastIndexOf('/') + 1);
+    const slash = key.lastIndexOf('/');
+    items.push({
+      bucket: 'r2',
+      path: key,
+      name,
+      folder: slash === -1 ? '' : key.slice(0, slash),
+      url: r2UrlFor(key),
+      type: typeOf(name, ''),
+      size,
+      mime: '',
+      createdAt: modified ? modified.toISOString() : null,
+      derived: isDerived(name),
+    });
+  };
+
+  // Flat listing (no delimiter) of everything under a prefix.
+  const flat = async (prefix: string) => {
+    let token: string | undefined;
+    do {
+      if (items.length >= MAX_FILES_R2) {
+        truncated = true;
+        return;
+      }
+      const res = await client.send(
+        new ListObjectsV2Command({ Bucket, Prefix: prefix, ContinuationToken: token, MaxKeys: 1000 })
+      );
+      for (const o of res.Contents || []) pushObject(o.Key || '', o.Size || 0, o.LastModified);
+      token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (token);
+  };
+
+  // Folder-by-folder listing for the first levels, flat below that.
+  const walk = async (prefix: string, depth: number): Promise<void> => {
+    if (depth >= 4) return flat(prefix);
+    const subfolders: string[] = [];
+    let token: string | undefined;
+    do {
+      const res = await client.send(
+        new ListObjectsV2Command({ Bucket, Prefix: prefix, Delimiter: '/', ContinuationToken: token, MaxKeys: 1000 })
+      );
+      for (const o of res.Contents || []) pushObject(o.Key || '', o.Size || 0, o.LastModified);
+      for (const cp of res.CommonPrefixes || []) {
+        const p = cp.Prefix || '';
+        // Skip folders that only mirror the Supabase buckets (already listed above).
+        if (depth === 0 && R2_MIRROR_PREFIXES.has(p)) continue;
+        if (p) subfolders.push(p);
+      }
+      token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (token);
+    await runPool(
+      subfolders.map((f) => () => walk(f, depth + 1)),
+      8
+    );
+  };
+
+  await walk('', 0);
+  if (items.length >= MAX_FILES_R2) truncated = true;
+
+  // WordPress keeps small copies next to every original (photo-300x300.jpg).
+  // Use the closest-to-300px one as the grid preview so the library doesn't
+  // download multi-MB originals just to draw thumbnails.
+  const thumbs = new Map<string, { w: number; url: string }>();
+  for (const it of items) {
+    const m = it.path.match(/^(.*)-(\d{2,4})x(\d{2,4})(\.[a-z0-9]+)$/i);
+    if (!m || it.type !== 'image') continue;
+    const base = `${m[1]}${m[4]}`;
+    const w = parseInt(m[2], 10);
+    const cur = thumbs.get(base);
+    const score = (x: number) => Math.abs(x - 300);
+    if (!cur || score(w) < score(cur.w)) thumbs.set(base, { w, url: it.url });
+  }
+  for (const it of items) {
+    if (!it.derived) {
+      const t = thumbs.get(it.path);
+      if (t) it.thumb = t.url;
+    }
+  }
+
+  return { at: Date.now(), items, truncated };
+}
+
+async function loadR2(refresh: boolean): Promise<CacheEntry> {
+  const hit = cache.get('r2');
+  if (!refresh && hit && Date.now() - hit.at < R2_CACHE_TTL_MS) return hit;
+  const entry = await listR2();
+  cache.set('r2', entry);
+  return entry;
+}
+
 export async function GET(req: Request) {
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -157,13 +304,37 @@ export async function GET(req: Request) {
   const perPage = Math.min(200, Math.max(12, parseInt(sp.get('perPage') || '48', 10) || 48));
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1);
 
+  const wantR2 = (bucketParam === 'all' || bucketParam === 'r2') && r2EnvPresent();
   const buckets = bucketParam === 'all' ? BUCKETS : BUCKETS.filter((b) => b === bucketParam);
-  if (buckets.length === 0) {
+  if (buckets.length === 0 && bucketParam !== 'r2') {
     return NextResponse.json({ error: 'Unknown bucket.' }, { status: 400 });
+  }
+  if (bucketParam === 'r2' && !wantR2) {
+    return NextResponse.json(
+      { error: 'Cloudflare R2 is not configured (R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET_NAME / R2_PUBLIC_URL).' },
+      { status: 400 }
+    );
   }
 
   try {
-    const loaded = await Promise.all(buckets.map((b) => loadBucket(b, refresh)));
+    // One source failing (e.g. R2 hiccup) must not blank the whole library.
+    const sources: { label: string; run: () => Promise<CacheEntry> }[] = [
+      ...buckets.map((b) => ({ label: BUCKET_NAMES[b], run: () => loadBucket(b, refresh) })),
+      ...(wantR2 ? [{ label: 'WordPress uploads (R2)', run: () => loadR2(refresh) }] : []),
+    ];
+    const settled = await Promise.allSettled(sources.map((src) => src.run()));
+    const warnings: string[] = [];
+    const loaded: CacheEntry[] = [];
+    settled.forEach((r, i) => {
+      if (r.status === 'fulfilled') loaded.push(r.value);
+      else {
+        console.error(`[media-library] ${sources[i].label} failed:`, r.reason);
+        warnings.push(`${sources[i].label}: ${r.reason instanceof Error ? r.reason.message : 'could not be loaded'}`);
+      }
+    });
+    if (loaded.length === 0) {
+      return NextResponse.json({ error: warnings.join(' · ') || 'Could not load media.' }, { status: 500 });
+    }
     const truncated = loaded.some((l) => l.truncated);
     let items = loaded.flatMap((l) => l.items);
 
@@ -215,6 +386,7 @@ export async function GET(req: Request) {
       totalPages,
       counts,
       truncated,
+      warnings,
     });
   } catch (err) {
     console.error('[media-library] list error:', err);
@@ -235,6 +407,37 @@ export async function DELETE(req: Request) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  // WordPress library files live only in R2: delete the file plus its
+  // WordPress-generated copies (photo-300x300.jpg …) from R2 only.
+  if (body.bucket === 'r2') {
+    const key = (body.path || '').trim();
+    if (!r2EnvPresent() || !key || key.includes('..') || R2_MIRROR_PREFIXES.has(key.split('/')[0] + '/')) {
+      return NextResponse.json({ error: 'Invalid path.' }, { status: 400 });
+    }
+    try {
+      const client = getR2Client();
+      const Bucket = process.env.R2_BUCKET_NAME as string;
+      const keys = new Set<string>([key]);
+      const m = key.match(/^(.*)(\.[a-z0-9]+)$/i);
+      if (m) {
+        const sizeRe = new RegExp('^' + escapeRegExp(m[1]) + '-\\d{2,4}x\\d{2,4}' + escapeRegExp(m[2]) + '$', 'i');
+        let token: string | undefined;
+        do {
+          const res = await client.send(
+            new ListObjectsV2Command({ Bucket, Prefix: `${m[1]}-`, ContinuationToken: token, MaxKeys: 1000 })
+          );
+          for (const o of res.Contents || []) if (o.Key && sizeRe.test(o.Key)) keys.add(o.Key);
+          token = res.IsTruncated ? res.NextContinuationToken : undefined;
+        } while (token);
+      }
+      await Promise.all(Array.from(keys).map((k) => client.send(new DeleteObjectCommand({ Bucket, Key: k }))));
+      cache.delete('r2');
+      return NextResponse.json({ ok: true, removed: keys.size });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Delete failed.' }, { status: 500 });
+    }
   }
 
   const bucket = body.bucket as StorageBucket;
