@@ -30,6 +30,14 @@ import OrderStatusHistory from '@/components/admin/order-status-history';
 
 // Per-status left-border accent so an order's state is readable at a glance
 // while scanning the table, without having to read the dropdown text.
+// ---- Mobile card layout (below the lg breakpoint) --------------------------
+// The orders table has 10 columns, which forced sideways scrolling on phones.
+// On small screens each <tr> is turned into a stacked card (CSS only, same DOM,
+// so every button / handler works exactly as on desktop). `data-label` on a
+// cell is shown as a small caption above its value on mobile.
+const M_LABEL =
+  'max-lg:before:mb-1 max-lg:before:block max-lg:before:text-[10px] max-lg:before:font-semibold max-lg:before:uppercase max-lg:before:tracking-wider max-lg:before:text-muted-foreground max-lg:before:content-[attr(data-label)]';
+
 const STATUS_BORDER_COLOR: Record<string, string> = {
   pending: 'border-l-amber-400',
   paid: 'border-l-emerald-500',
@@ -697,7 +705,7 @@ export default function OrdersPanel() {
 
         <div className="flex flex-wrap items-center gap-2">
           <SelectRoot value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-[150px] max-sm:min-w-[130px] max-sm:flex-1">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
             <SelectContent>
@@ -711,7 +719,7 @@ export default function OrdersPanel() {
           </SelectRoot>
 
           <SelectRoot value={paymentFilter} onValueChange={setPaymentFilter}>
-            <SelectTrigger className="w-[130px]">
+            <SelectTrigger className="w-[130px] max-sm:min-w-[130px] max-sm:flex-1">
               <SelectValue placeholder="All Payments" />
             </SelectTrigger>
             <SelectContent>
@@ -760,9 +768,18 @@ export default function OrdersPanel() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
-        <table className="w-full min-w-[900px] table-auto">
-          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+      <div className="rounded-lg lg:overflow-x-auto lg:border lg:border-border/60 lg:bg-card">
+        {/* Mobile only: the table header (with its select-all box) is hidden. */}
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-border/60 bg-card px-3 py-2.5 lg:hidden">
+          <Checkbox
+            checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+            onCheckedChange={toggleSelectAllVisible}
+            aria-label="Select all orders"
+          />
+          <span className="text-sm text-muted-foreground">Select all ({filteredOrders.length})</span>
+        </div>
+        <table className="block w-full table-auto lg:table lg:min-w-[900px]">
+          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground max-lg:hidden">
             <tr>
               <th className="w-10 px-4 py-3">
                 <Checkbox
@@ -782,10 +799,10 @@ export default function OrdersPanel() {
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-lg:block">
             {filteredOrders.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <tr className="max-lg:block">
+                <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground max-lg:block max-lg:rounded-lg max-lg:border max-lg:bg-card">
                   No orders match your search or filters.
                 </td>
               </tr>
@@ -1703,17 +1720,19 @@ function OrderRow({
       <tr
         data-focus-id={order.id}
         className={`border-t border-l-4 ${STATUS_BORDER_COLOR[order.status] || 'border-l-transparent'} ${
-          selected ? 'bg-destructive/5' : order.status === 'cancelled' ? 'bg-red-50/50' : ''
+          selected ? 'bg-destructive/5' : order.status === 'cancelled' ? 'bg-red-50/50' : 'max-lg:bg-card'
+        } max-lg:relative max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-3 max-lg:gap-y-3 max-lg:rounded-lg max-lg:border-y max-lg:border-r max-lg:p-3 ${
+          open ? 'max-lg:mb-0 max-lg:rounded-b-none' : 'max-lg:mb-3'
         }`}
       >
-        <td className="px-4 py-3 align-top">
+        <td className={`px-4 py-3 align-top max-lg:absolute max-lg:right-3 max-lg:top-3 max-lg:z-10 max-lg:p-0`}>
           <Checkbox
             checked={selected}
             onCheckedChange={() => onToggleSelect(order.id)}
             aria-label={`Select order ${order.id}`}
           />
         </td>
-        <td className="px-4 py-3 align-top">
+        <td className={`px-4 py-3 align-top max-lg:col-span-2 max-lg:block max-lg:p-0 max-lg:pr-9`}>
           <div className="flex items-center gap-1.5">
             <span className="font-mono text-xs font-semibold" title={order.id}>
               #{shortId}
@@ -1728,7 +1747,7 @@ function OrderRow({
             </button>
           </div>
         </td>
-        <td className="px-4 py-3 align-top">
+        <td className={`px-4 py-3 align-top max-lg:col-span-2 max-lg:block max-lg:p-0`}>
           <div className="text-sm font-medium">{order.customer_name || 'Guest'}</div>
           {order.customer_email && (
             <div className="text-xs text-muted-foreground">{order.customer_email}</div>
@@ -1755,7 +1774,7 @@ function OrderRow({
             </div>
           )}
         </td>
-        <td className="px-4 py-3 align-top">
+        <td className={`px-4 py-3 align-top max-lg:col-span-2 max-lg:block max-lg:p-0`}>
           <div className="flex items-center gap-2">
             <OrderItemThumbs items={order.items} />
             <div className="text-xs">
@@ -1763,14 +1782,14 @@ function OrderRow({
                 <Link
                   href={`/product/${order.items[0].slug}`}
                   target="_blank"
-                  className="flex max-w-[9rem] items-center gap-1 truncate font-medium hover:underline"
+                  className="flex max-w-[9rem] items-center gap-1 truncate font-medium hover:underline max-lg:max-w-[15rem]"
                   title="Open the exact colour/variation ordered"
                 >
                   <span className="truncate">{order.items[0]?.product_name || '—'}</span>
                   <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
                 </Link>
               ) : (
-                <div className="max-w-[9rem] truncate font-medium">{order.items[0]?.product_name || '—'}</div>
+                <div className="max-w-[9rem] truncate font-medium max-lg:max-w-[15rem]">{order.items[0]?.product_name || '—'}</div>
               )}
               {order.items.length > 1 && (
                 <div className="font-medium text-primary">
@@ -1791,11 +1810,11 @@ function OrderRow({
             </div>
           </div>
         </td>
-        <td className="px-4 py-3 align-top text-sm">
+        <td data-label="Date" className={`px-4 py-3 align-top text-sm ${M_LABEL} max-lg:block max-lg:p-0`}>
           <div>{order.created_at ? new Date(order.created_at).toLocaleString() : ''}</div>
           <SourceChip attribution={order.attribution} />
         </td>
-        <td className="px-4 py-3 align-top text-sm font-medium">
+        <td data-label="Total" className={`px-4 py-3 align-top text-sm font-medium ${M_LABEL} max-lg:block max-lg:p-0`}>
           {showPriceBreakdown ? (
             <div
               className="flex flex-col leading-tight"
@@ -1812,7 +1831,7 @@ function OrderRow({
             formatINR(order.total_amount || 0)
           )}
         </td>
-        <td className="px-4 py-3 align-top text-sm">
+        <td data-label="Payment" className={`px-4 py-3 align-top text-sm ${M_LABEL} max-lg:col-span-2 max-lg:block max-lg:p-0`}>
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${
               order.payment_method === 'cod'
@@ -1960,7 +1979,7 @@ function OrderRow({
             </div>
           )}
         </td>
-        <td className="px-4 py-3 align-top text-sm">
+        <td data-label="Status" className={`px-4 py-3 align-top text-sm ${M_LABEL} max-lg:block max-lg:p-0`}>
           {/* An online order stuck at "pending" almost always means the
               Razorpay popup was closed/abandoned before payment finished —
               that's a different situation from a COD order sitting
@@ -1980,7 +1999,7 @@ function OrderRow({
           <select
             value={order.status}
             onChange={(e) => onChangeStatus(order.id, e.target.value)}
-            className={`rounded border-2 px-2 py-1 text-sm ${
+            className={`rounded border-2 px-2 py-1 text-sm max-lg:w-full max-lg:py-2 ${
               STATUS_BORDER_COLOR[order.status]?.replace('border-l-', 'border-') || 'border-input'
             }`}
           >
@@ -1994,7 +2013,7 @@ function OrderRow({
             </div>
           )}
         </td>
-        <td className="px-4 py-3 align-top text-sm">
+        <td data-label="Shipping" className={`px-4 py-3 align-top text-sm ${M_LABEL} max-lg:block max-lg:p-0`}>
           {order.tracking_number || (order._shipments?.length ?? 0) > 0 ? (
             <div className="flex flex-col items-start gap-1.5">
               {(order._shipments?.length ?? 0) > 0 ? (
@@ -2048,10 +2067,10 @@ function OrderRow({
             </Button>
           )}
         </td>
-        <td className="px-4 py-3 align-top text-sm">
-          <div className="flex flex-col items-start gap-1.5">
-            <Button size="sm" onClick={() => setOpen((v) => !v)}>{open ? 'Hide' : 'View'}</Button>
-            <Button size="sm" variant="outline" className="gap-1" asChild>
+        <td className={`px-4 py-3 align-top text-sm max-lg:col-span-2 max-lg:block max-lg:p-0`}>
+          <div className="flex flex-col items-start gap-1.5 max-lg:flex-row max-lg:items-stretch max-lg:gap-2">
+            <Button size="sm" className="max-lg:h-10 max-lg:flex-1" onClick={() => setOpen((v) => !v)}>{open ? 'Hide' : 'View'}</Button>
+            <Button size="sm" variant="outline" className="gap-1 max-lg:h-10 max-lg:flex-1" asChild>
               <a href={`/api/invoice/${order.id}`} download>
                 <Download className="h-3.5 w-3.5" /> Invoice
               </a>
@@ -2060,8 +2079,8 @@ function OrderRow({
         </td>
       </tr>
       {open && (
-        <tr className="bg-muted/20">
-          <td colSpan={10} className="px-4 py-3">
+        <tr className="bg-muted/20 max-lg:mb-3 max-lg:block max-lg:rounded-b-lg max-lg:border max-lg:border-t-0">
+          <td colSpan={10} className="px-4 py-3 max-lg:block max-lg:px-3">
             <TrafficSourceBar attribution={order.attribution} />
             {/* Price breakdown sits on the left; Items fills the empty space
                 to its right instead of being pushed below as an under-used

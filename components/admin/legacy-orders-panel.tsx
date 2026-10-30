@@ -69,6 +69,10 @@ function waDigits(raw: string | null | undefined): string | null {
   return null;
 }
 
+// Mobile card layout: below lg each table row becomes a stacked card (CSS only).
+const M_LABEL =
+  'max-lg:before:mb-1 max-lg:before:block max-lg:before:text-[10px] max-lg:before:font-semibold max-lg:before:uppercase max-lg:before:tracking-wider max-lg:before:text-muted-foreground max-lg:before:content-[attr(data-label)]';
+
 const STATUS_BORDER_COLOR: Record<string, string> = {
   completed: 'border-l-green-600',
   processing: 'border-l-sky-500',
@@ -336,9 +340,9 @@ export default function LegacyOrdersPanel() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
-        <table className="w-full min-w-[900px] table-auto">
-          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+      <div className="rounded-lg lg:overflow-x-auto lg:border lg:border-border/60 lg:bg-card">
+        <table className="block w-full table-auto lg:table lg:min-w-[900px]">
+          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground max-lg:hidden">
             <tr>
               <th className="px-4 py-3">Order #</th>
               <th className="px-4 py-3">Customer</th>
@@ -350,16 +354,16 @@ export default function LegacyOrdersPanel() {
               <th className="px-4 py-3">View</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-lg:block">
             {loading && rows.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <tr className="max-lg:block">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground max-lg:block max-lg:rounded-lg max-lg:border max-lg:bg-card">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <tr className="max-lg:block">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground max-lg:block max-lg:rounded-lg max-lg:border max-lg:bg-card">
                   {error ? 'Could not load orders.' : 'No old orders match your search or filters.'}
                 </td>
               </tr>
@@ -450,36 +454,36 @@ function LegacyRow({
     <tr
       className={`border-t border-l-4 ${STATUS_BORDER_COLOR[key] || 'border-l-transparent'} ${
         dim ? 'opacity-60' : ''
-      }`}
+      } max-lg:mb-3 max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-3 max-lg:gap-y-3 max-lg:rounded-lg max-lg:border-y max-lg:border-r max-lg:bg-card max-lg:p-3`}
     >
-      <td className="px-4 py-3 align-top">
+      <td className="px-4 py-3 align-top max-lg:col-span-2 max-lg:block max-lg:p-0">
         <span className="font-mono text-xs font-semibold">#{order.id}</span>
       </td>
-      <td className="px-4 py-3 align-top">
+      <td className="px-4 py-3 align-top max-lg:col-span-2 max-lg:block max-lg:p-0">
         <div className="text-sm font-medium">{order.customer_name}</div>
         {order.customer_phone && <div className="text-xs text-muted-foreground">{order.customer_phone}</div>}
         {order.customer_email && <div className="text-xs text-muted-foreground">{order.customer_email}</div>}
       </td>
-      <td className="px-4 py-3 align-top text-sm">
+      <td className="px-4 py-3 align-top text-sm max-lg:col-span-2 max-lg:block max-lg:p-0">
         <div className="flex items-start gap-2">
           <Thumb src={order.first_item_image} alt={order.first_item ?? ''} />
           <div className="min-w-0">
-            <div className="max-w-[200px] truncate" title={order.first_item ?? ''}>
+            <div className="max-w-[200px] truncate max-lg:max-w-[16rem]" title={order.first_item ?? ''}>
               {order.first_item || '—'}
             </div>
             {more && <div className="text-xs text-muted-foreground">{more.trim()}</div>}
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 align-top text-sm">{formatIST(order.date_created_gmt)}</td>
-      <td className="px-4 py-3 align-top text-sm font-medium">{formatINR(order.total_amount)}</td>
-      <td className="px-4 py-3 align-top text-sm">
+      <td data-label="Date (IST)" className={`px-4 py-3 align-top text-sm ${M_LABEL} max-lg:block max-lg:p-0`}>{formatIST(order.date_created_gmt)}</td>
+      <td data-label="Total" className={`px-4 py-3 align-top text-sm font-medium ${M_LABEL} max-lg:block max-lg:p-0`}>{formatINR(order.total_amount)}</td>
+      <td data-label="Payment" className={`px-4 py-3 align-top text-sm ${M_LABEL} max-lg:block max-lg:p-0`}>
         {order.payment_method_title || order.payment_method || '—'}
       </td>
-      <td className="px-4 py-3 align-top">
+      <td data-label="Status" className={`px-4 py-3 align-top ${M_LABEL} max-lg:block max-lg:p-0`}>
         <StatusBadge status={order.status} />
       </td>
-      <td className="px-4 py-3 align-top">
+      <td className="px-4 py-3 align-top max-lg:col-span-2 max-lg:block max-lg:p-0">
         <div className="flex flex-col items-start gap-1.5">
           <Button size="sm" onClick={() => onView(order.id)}>
             View
