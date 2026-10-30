@@ -184,7 +184,7 @@ export async function runPaymentReminderJob() {
     .select('id, items, total_amount, online_payment_discount, customer_name, customer_email, created_at, payment_method, advance_amount')
     .eq('status', 'pending')
     .neq('payment_method', 'cod')
-    .not('razorpay_order_id', 'is', null)
+    .or('razorpay_order_id.not.is.null,cashfree_order_id.not.is.null')
     .not('customer_email', 'is', null)
     .is('payment_reminder_sent_at', null)
     .lte('created_at', thirtyMinAgo);
@@ -676,7 +676,7 @@ export async function runReturnPickupTrackingJob() {
   const { data: orders } = await supabase
     .from('orders')
     .select(
-      'id, customer_name, customer_email, customer_phone, shipping_address, items, total_amount, payment_method, razorpay_payment_id'
+      'id, customer_name, customer_email, customer_phone, shipping_address, items, total_amount, payment_method, razorpay_payment_id, payment_gateway, cashfree_order_id'
     )
     .in('id', orderIds);
   const ordersById = new Map((orders || []).map((o) => [o.id, o]));

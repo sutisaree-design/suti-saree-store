@@ -20,7 +20,7 @@ import { formatINR } from '@/lib/format';
  */
 export const PAYMENT_COPY = {
   onlineTitle: 'Pay Online',
-  onlineSub: 'UPI, cards, netbanking · Razorpay secured',
+  onlineSub: 'UPI, cards, netbanking · Secure payment',
   onlineNote: 'Prepaid orders are confirmed instantly and packed ahead of COD orders.',
   benefits: [
     { icon: 'zap', title: 'Dispatched first', sub: 'Priority packing' },
@@ -62,6 +62,8 @@ interface PaymentMethodSelectorProps {
   value: CheckoutPaymentMethod;
   onChange: (method: CheckoutPaymentMethod) => void;
   partial?: PartialPayOption | null;
+  /** false when the admin switched ALL online payment gateways off (Admin > Settings > Payment Gateways): only COD is shown. */
+  onlineAvailable?: boolean;
   /** Rupees saved by paying online (0 / undefined hides all saving UI). */
   savings: number;
   /** Final amount if the customer pays online. */
@@ -111,6 +113,7 @@ export default function PaymentMethodSelector({
   value,
   onChange,
   partial,
+  onlineAvailable = true,
   savings,
   onlineTotal,
   codTotal,
@@ -123,6 +126,7 @@ export default function PaymentMethodSelector({
   return (
     <div role="radiogroup" aria-label="Payment method" className="flex flex-col gap-2.5">
       {/* ───────── Pay Online (recommended) ───────── */}
+      {onlineAvailable && (
       <button
         type="button"
         role="radio"
@@ -183,9 +187,10 @@ export default function PaymentMethodSelector({
           </span>
         </Expand>
       </button>
+      )}
 
       {/* ───────── Partial Pay (advance online, rest on delivery) ───────── */}
-      {partial && (
+      {onlineAvailable && partial && (
         <button
           type="button"
           role="radio"
@@ -304,7 +309,7 @@ export default function PaymentMethodSelector({
         </button>
 
         {/* Separate button (not nested inside the card button) */}
-        {cod && hasSavings && (
+        {cod && hasSavings && onlineAvailable && (
           <button
             type="button"
             onClick={() => onChange('online')}
@@ -317,7 +322,9 @@ export default function PaymentMethodSelector({
       </div>
 
       <p className="text-center text-[10px] leading-snug text-muted-foreground">
-        {partial
+        {!onlineAvailable
+          ? 'Online payment is temporarily unavailable — please choose Cash on Delivery.'
+          : partial
           ? 'Same product price on every option — the online-payment discount applies to full online payment only.'
           : 'Same price either way — the only difference is the online-payment discount shown above.'}
       </p>

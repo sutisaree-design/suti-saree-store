@@ -92,6 +92,8 @@ import {
 } from '@/lib/partial-pay';
 import StickyOrderBar from '@/components/checkout/sticky-order-bar';
 import { useForceMobileRepaint } from '@/hooks/use-force-mobile-repaint';
+import { usePaymentGateway } from '@/hooks/use-payment-gateway';
+import { payWithCashfree } from '@/lib/cashfree-client';
 import { toast } from 'sonner';
 import { computeCheckoutGst } from '@/lib/gst-report';
 
@@ -204,6 +206,9 @@ export default function CheckoutPage() {
     fetchPartialPaySettings().then(setPartialPaySettings).catch(() => {});
   }, []);
   const { user } = useAuth();
+  // Admin > Settings > Payment Gateways: which gateway (Razorpay / Cashfree) takes online payments, or none (COD only).
+  const gateway = usePaymentGateway();
+  const onlineAvailable = !gateway.loaded || gateway.active !== null;
 
   // Same real-device repaint bug as StickyOrderBar (see
   // hooks/use-force-mobile-repaint.ts): the Payment section's selected-card
@@ -879,7 +884,7 @@ export default function CheckoutPage() {
   // Partial Pay is priced like COD (no online-payment discount) and never offered for resale orders.
   // The advance shown here is display-only: the server (orders_apply_partial_pay trigger) recomputes
   // it from the stored total and the admin setting, and Razorpay is charged that amount.
-  const partialEligible = !isResale && isPartialPayEligible(partialPaySettings, codTotalDisplay);
+  const partialEligible = !isResale && onlineAvailable && isPartialPayEligible(partialPaySettings, codTotalDisplay);
   const partialAmounts = computeAdvance(codTotalDisplay, partialPaySettings.percent);
   const partialOption = partialEligible
     ? {
@@ -893,6 +898,10 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (paymentMethod === 'partial' && !partialEligible) setPaymentMethod('online');
   }, [paymentMethod, partialEligible]);
+  // All online gateways switched off by the admin -> only Cash on Delivery is possible.
+  useEffect(() => {
+    if (!onlineAvailable && paymentMethod !== 'cod') setPaymentMethod('cod');
+  }, [onlineAvailable, paymentMethod]);
 
   // Repaint fix (see hooks/use-force-mobile-repaint.ts) — must sit here,
   // after payableTotal/total/onlinePaymentDiscount exist, not up near the
@@ -1221,6 +1230,24 @@ export default function CheckoutPage() {
 
     setPlacing(true);
 
+    // Re-check the admin's gateway choice right now (the page may have been open for a while),
+    // BEFORE an order row is created, so a switched-off gateway never leaves an orphan order.
+    let activeGateway = gateway.active;
+    if (paymentMethod === 'online' || paymentMethod === 'partial') {
+      try {
+        const gw = await fetch('/api/payment-gateways', { cache: 'no-store' }).then((r) => r.json());
+        activeGateway = gw?.active ?? null;
+      } catch {
+        // keep the last known value
+      }
+      if (!activeGateway) {
+        setPaymentMethod('cod');
+        toast.error('Online payment is unavailable right now. Please choose Cash on Delivery.');
+        setPlacing(false);
+        return;
+      }
+    }
+
     try {
       // 1. Create internal order in Supabase with status 'pending'
       const orderItems = items.map((i) => ({
@@ -1450,37 +1477,54 @@ export default function CheckoutPage() {
         return;
       }
 
-      // 3. Create Razorpay order via API route
-      // SECURITY: amount is no longer sent from the client — create-order
-      // looks up the authoritative total_amount from the `orders` row
-      // itself using internalOrderId, so a tampered client can't change
-      // what gets charged.
-      const createOrderRes = await fetch('/api/razorpay/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ internalOrderId }),
-      });
-      const createOrderData = await createOrderRes.json();
-      if (!createOrderRes.ok) {
-        // Mark order as failed (server-side — anon no longer has UPDATE
-        // rights on `orders`).
-        fetch('/api/razorpay/mark-failed', {
+      // 3. Take the online payment through whichever gateway the admin has switched on.
+      if (activeGateway === 'cashfree') {
+        // Cashfree: create order -> modal -> server-side verification (lib/cashfree-client.ts).
+        try {
+          await payWithCashfree(internalOrderId);
+        } catch (cfErr) {
+          if ((cfErr as { stage?: string })?.stage === 'create') {
+            fetch('/api/razorpay/mark-failed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ internalOrderId }),
+            }).catch(() => {});
+          }
+          throw cfErr;
+        }
+      } else {
+        // 3. Create Razorpay order via API route
+        // SECURITY: amount is no longer sent from the client — create-order
+        // looks up the authoritative total_amount from the `orders` row
+        // itself using internalOrderId, so a tampered client can't change
+        // what gets charged.
+        const createOrderRes = await fetch('/api/razorpay/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ internalOrderId }),
-        }).catch(() => {});
-        throw new Error(createOrderData.error || 'Failed to create payment order');
-      }
+        });
+        const createOrderData = await createOrderRes.json();
+        if (!createOrderRes.ok) {
+          // Mark order as failed (server-side — anon no longer has UPDATE
+          // rights on `orders`).
+          fetch('/api/razorpay/mark-failed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ internalOrderId }),
+          }).catch(() => {});
+          throw new Error(createOrderData.error || 'Failed to create payment order');
+        }
 
-      // 4. Open Razorpay checkout popup
-      await openRazorpayCheckout(
-        createOrderData.order.id,
-        createOrderData.keyId,
-        internalOrderId,
-        customerName,
-        customerEmail,
-        customerPhone
-      );
+        // 4. Open Razorpay checkout popup
+        await openRazorpayCheckout(
+          createOrderData.order.id,
+          createOrderData.keyId,
+          internalOrderId,
+          customerName,
+          customerEmail,
+          customerPhone
+        );
+      }
 
       // 5. Payment succeeded and verified.
       // NOTE: coupon.times_used is NOT incremented here — see the matching
@@ -1593,7 +1637,9 @@ export default function CheckoutPage() {
       {/* Loaded only here (not site-wide in app/layout.tsx) since only the
           checkout page ever opens the Razorpay popup — this used to load
           on every single page load across the whole site for no reason. */}
-      <NextScript src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
+      {gateway.active === 'razorpay' && (
+        <NextScript src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
+      )}
       <h1 className="mb-2 font-serif text-3xl font-bold text-primary sm:text-4xl">
         Checkout
       </h1>
@@ -2155,6 +2201,7 @@ export default function CheckoutPage() {
               value={paymentMethod}
               onChange={setPaymentMethod}
               partial={partialOption}
+              onlineAvailable={onlineAvailable}
               savings={onlineSavingsDisplay}
               onlineTotal={onlineTotalDisplay}
               codTotal={codTotalDisplay}

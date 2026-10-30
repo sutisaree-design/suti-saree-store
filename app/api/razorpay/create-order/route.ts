@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { isInPaymentRequestFlow, logPaymentRequestEvent } from '@/lib/order-payment-events';
+import { isGatewayAllowed } from '@/lib/payment-gateways-server';
 
 // SECURITY: amount is NEVER taken from the request body anymore. It is
 // looked up server-side from the `orders` row (total_amount, set by the
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
 
     if (!internalOrderId || typeof internalOrderId !== 'string') {
       return NextResponse.json({ error: 'internalOrderId is required' }, { status: 400 });
+    }
+
+    // Admin > Settings > Payment Gateways: refuse new Razorpay payments when it's switched off.
+    if (!(await isGatewayAllowed('razorpay'))) {
+      return NextResponse.json({ error: 'Online payment via Razorpay is currently unavailable.' }, { status: 403 });
     }
 
     const admin = getSupabaseAdmin();
@@ -77,7 +83,7 @@ export async function POST(req: NextRequest) {
     // signature from a different (cheaper) order.
     const { error: updateError } = await admin
       .from('orders')
-      .update({ razorpay_order_id: rzpOrder.id })
+      .update({ razorpay_order_id: rzpOrder.id, payment_gateway: 'razorpay' })
       .eq('id', internalOrderId)
       .eq('status', 'pending');
 

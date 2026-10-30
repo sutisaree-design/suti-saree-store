@@ -59,6 +59,13 @@ import {
   fetchBlurPlaceholderSettings,
   saveBlurPlaceholderSettings,
 } from '@/lib/settings-api';
+import {
+  DEFAULT_PAYMENT_GATEWAY_SETTINGS,
+  normalizePaymentGateways,
+  resolveActiveGateway,
+  GATEWAY_LABEL,
+  type PaymentGatewaySettings,
+} from '@/lib/payment-gateways';
 import { DEFAULT_PARTIAL_PAY_SETTINGS, normalizePartialPay, computeAdvance, type PartialPaySettings } from '@/lib/partial-pay';
 import type { BackfillProgress } from '@/lib/media-backfill';
 import type { ResizeBackfillProgress } from '@/lib/image-resize-backfill';
@@ -132,6 +139,10 @@ export default function SettingsPanel() {
   const [savingPaymentDiscount, setSavingPaymentDiscount] = useState(false);
   const [partialPayForm, setPartialPayForm] = useState<PartialPaySettings | null>(null);
   const [savingPartialPay, setSavingPartialPay] = useState(false);
+  // Payment gateways (Razorpay / Cashfree / all-online master switch)
+  const [gatewayForm, setGatewayForm] = useState<PaymentGatewaySettings | null>(null);
+  const [gatewayConfigured, setGatewayConfigured] = useState<{ razorpay: boolean; cashfree: boolean; cashfreeMode: string } | null>(null);
+  const [savingGateways, setSavingGateways] = useState(false);
   const [catalogVideoForm, setCatalogVideoForm] = useState<CatalogVideoSettings | null>(null);
   const [savingCatalogVideo, setSavingCatalogVideo] = useState(false);
   const [catalogListingForm, setCatalogListingForm] = useState<CatalogListingSettings | null>(null);
@@ -201,6 +212,18 @@ export default function SettingsPanel() {
     fetchSocialLinks()
       .then(setSocialForm)
       .catch(() => toast.error('Failed to load social media links'));
+
+    // Payment gateway toggles (admin-only route; also reports whether the API keys are set on the server).
+    fetch('/api/admin/settings/payment-gateways', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('load failed'))))
+      .then((d) => {
+        setGatewayForm(normalizePaymentGateways(d.settings));
+        setGatewayConfigured(d.configured ?? null);
+      })
+      .catch(() => {
+        setGatewayForm(DEFAULT_PAYMENT_GATEWAY_SETTINGS);
+        toast.error('Failed to load payment gateway settings');
+      });
 
     // Partial Pay is read/written through an admin-only route (the advance is derived from it).
     fetch('/api/admin/settings/partial-pay', { cache: 'no-store' })
@@ -394,6 +417,28 @@ export default function SettingsPanel() {
       toast.error(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSavingSocial(false);
+    }
+  };
+
+  const onSubmitGateways = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!gatewayForm) return;
+    setSavingGateways(true);
+    try {
+      const res = await fetch('/api/admin/settings/payment-gateways', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(gatewayForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setGatewayForm(normalizePaymentGateways(data.settings));
+      setGatewayConfigured(data.configured ?? null);
+      toast.success('Payment gateway settings saved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSavingGateways(false);
     }
   };
 
@@ -1685,6 +1730,102 @@ export default function SettingsPanel() {
           <Button type="submit" disabled={savingPaymentDiscount} className="mt-2 w-fit bg-primary">
             <Save className="mr-1.5 h-4 w-4" />{' '}
             {savingPaymentDiscount ? 'Saving…' : 'Save Payment Discount'}
+          </Button>
+        </form>
+      )}
+
+      <div className="mt-8">
+        <h2 className="font-serif text-2xl font-bold text-primary">Payment Gateways</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Turn Razorpay and Cashfree on or off, or switch off ALL online payments at once (customers
+          then see Cash on Delivery only). Orders already paid are not affected, and refunds keep
+          going through the gateway that originally took the payment.
+        </p>
+      </div>
+
+      {!gatewayForm ? (
+        <p className="py-4 text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <form
+          onSubmit={onSubmitGateways}
+          className="mt-4 grid max-w-xl gap-4 rounded-lg border border-border/60 bg-card p-5"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="gw-online">Accept online payments (master switch)</Label>
+              <p className="text-xs text-muted-foreground">
+                Off = every gateway is disabled. Pay Online and Partial Pay disappear from checkout
+                and only Cash on Delivery is offered.
+              </p>
+            </div>
+            <Switch
+              id="gw-online"
+              checked={gatewayForm.online_enabled}
+              onCheckedChange={(checked) => setGatewayForm((f) => f && { ...f, online_enabled: checked })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="gw-razorpay">Razorpay</Label>
+              <p className="text-xs text-muted-foreground">
+                {gatewayConfigured && !gatewayConfigured.razorpay
+                  ? 'API keys missing on the server (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET).'
+                  : 'UPI, cards, netbanking via Razorpay.'}
+              </p>
+            </div>
+            <Switch
+              id="gw-razorpay"
+              checked={gatewayForm.razorpay_enabled}
+              disabled={!gatewayForm.online_enabled}
+              onCheckedChange={(checked) => setGatewayForm((f) => f && { ...f, razorpay_enabled: checked })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="gw-cashfree">Cashfree</Label>
+              <p className="text-xs text-muted-foreground">
+                {gatewayConfigured && !gatewayConfigured.cashfree
+                  ? 'API keys missing on the server (CASHFREE_APP_ID / CASHFREE_SECRET_KEY).'
+                  : `UPI, cards, netbanking via Cashfree (${gatewayConfigured?.cashfreeMode === 'production' ? 'LIVE mode' : 'TEST / sandbox mode'}).`}
+              </p>
+            </div>
+            <Switch
+              id="gw-cashfree"
+              checked={gatewayForm.cashfree_enabled}
+              disabled={!gatewayForm.online_enabled}
+              onCheckedChange={(checked) => setGatewayForm((f) => f && { ...f, cashfree_enabled: checked })}
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="gw-default">If both are on, use</Label>
+            <select
+              id="gw-default"
+              value={gatewayForm.default_gateway}
+              disabled={!gatewayForm.online_enabled}
+              onChange={(e) =>
+                setGatewayForm((f) => f && { ...f, default_gateway: e.target.value === 'cashfree' ? 'cashfree' : 'razorpay' })
+              }
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="razorpay">Razorpay</option>
+              <option value="cashfree">Cashfree</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              A customer only ever sees one gateway at a time. Right now customers will pay via:{' '}
+              <b>
+                {(() => {
+                  const a = resolveActiveGateway(gatewayForm);
+                  return a ? GATEWAY_LABEL[a] : 'nothing — Cash on Delivery only';
+                })()}
+              </b>
+            </p>
+          </div>
+
+          <Button type="submit" disabled={savingGateways} className="mt-2 w-fit bg-primary">
+            <Save className="mr-1.5 h-4 w-4" /> {savingGateways ? 'Saving…' : 'Save Payment Gateways'}
           </Button>
         </form>
       )}

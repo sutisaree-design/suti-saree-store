@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
       .from('orders')
       .update({
         status: 'paid',
+        payment_gateway: 'razorpay',
         razorpay_payment_id,
         razorpay_signature,
         // Partial Pay: record the advance and what is still due on delivery.

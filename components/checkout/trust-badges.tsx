@@ -71,7 +71,7 @@ export default function TrustBadges() {
       <div className="flex flex-col items-center gap-2">
         <p className="text-[11px] text-muted-foreground">Safe & secure payments powered by</p>
         <div className="flex flex-wrap items-center justify-center gap-2">
-          {['Razorpay', 'UPI', 'Visa', 'Mastercard', 'RuPay', 'Net Banking'].map((method) => (
+          {['UPI', 'Visa', 'Mastercard', 'RuPay', 'Net Banking'].map((method) => (
             <span
               key={method}
               className="rounded border border-border/60 bg-background px-2 py-1 text-[10px] font-semibold tracking-wide text-foreground/70"

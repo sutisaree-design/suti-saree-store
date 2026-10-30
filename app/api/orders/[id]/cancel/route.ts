@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/supabase-server-auth';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { fetchFulfillmentSettings } from '@/lib/marketing-api';
-import { refundRazorpayPayment } from '@/lib/razorpay-refund';
+import { refundOrderPayment } from '@/lib/payment-refund';
 import { sendEmail } from '@/lib/email';
 import { orderCancelledByCustomerEmail } from '@/lib/email-templates';
 import { normalizePartialPay } from '@/lib/partial-pay';
@@ -29,7 +29,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const { data: order, error: fetchError } = await admin
     .from('orders')
     .select(
-      'id, user_id, customer_email, customer_name, items, status, created_at, payment_method, razorpay_payment_id, total_amount, tracking_number, advance_amount, advance_paid_at, advance_refund_id'
+      'id, user_id, customer_email, customer_name, items, status, created_at, payment_method, razorpay_payment_id, payment_gateway, cashfree_order_id, total_amount, tracking_number, advance_amount, advance_paid_at, advance_refund_id'
     )
     .eq('id', params.id)
     .single();
@@ -166,7 +166,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     });
   }
 
-  const refundResult = await refundRazorpayPayment(order.razorpay_payment_id, refundAmount);
+  const refundResult = await refundOrderPayment(order as any, refundAmount);
 
   if (refundResult.success) {
     await admin

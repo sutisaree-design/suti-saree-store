@@ -72,7 +72,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const { data: order } = await supabase
       .from('orders')
       .select(
-        'id, customer_name, customer_email, customer_phone, shipping_address, items, total_amount, payment_method, razorpay_payment_id'
+        'id, customer_name, customer_email, customer_phone, shipping_address, items, total_amount, payment_method, razorpay_payment_id, payment_gateway, cashfree_order_id'
       )
       .eq('id', updated.order_id)
       .single();

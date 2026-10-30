@@ -4,7 +4,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sutisaree.com'
 
 export const metadata: Metadata = {
   title: 'Checkout',
-  description: 'Complete your purchase securely with Razorpay payment.',
+  description: 'Complete your purchase securely with online payment or Cash on Delivery.',
   alternates: {
     canonical: `${SITE_URL}/checkout`,
   },

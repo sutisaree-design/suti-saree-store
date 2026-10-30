@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from './supabase-admin';
 import { sendEmail } from './email';
 import { orderStatusUpdateEmail } from './email-templates';
 import { isInPaymentRequestFlow } from './order-payment-events';
-import { refundRazorpayPayment } from './razorpay-refund';
+import { refundOrderPayment } from './payment-refund';
 import { awardLoyaltyPointsForDeliveredOrder } from './loyalty-award';
 
 // SECURITY NOTE: this now uses the service-role client instead of the
@@ -214,7 +214,7 @@ export async function updateOrderStatus(id: string, status: string) {
   const { data: existing, error: fetchError } = await supabase
     .from('orders')
     .select(
-      'id, status, customer_email, customer_name, tracking_number, courier_name, items, total_amount, payment_method, razorpay_payment_id, advance_amount, advance_paid_at, advance_refund_id'
+      'id, status, customer_email, customer_name, tracking_number, courier_name, items, total_amount, payment_method, razorpay_payment_id, payment_gateway, cashfree_order_id, advance_amount, advance_paid_at, advance_refund_id'
     )
     .eq('id', id)
     .maybeSingle();
@@ -260,7 +260,7 @@ export async function updateOrderStatus(id: string, status: string) {
       await supabase.from('orders').update({ refund_status: 'pending_manual' }).eq('id', id);
       refundOutcome = { status: 'pending_manual', amount: refundAmount };
     } else {
-      const refundResult = await refundRazorpayPayment(existing!.razorpay_payment_id as string, refundAmount);
+      const refundResult = await refundOrderPayment(existing as any, refundAmount);
       if (refundResult.success) {
         await supabase
           .from('orders')

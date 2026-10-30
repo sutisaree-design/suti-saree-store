@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
       .from('orders')
       .update({
         status: 'paid',
+        payment_gateway: 'razorpay',
         razorpay_payment_id: razorpayPaymentId,
         ...(order.payment_method === 'partial'
           ? {

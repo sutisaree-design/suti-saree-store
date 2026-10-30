@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { payWithCashfree } from '@/lib/cashfree-client';
 
 declare global {
   interface Window {
@@ -82,6 +83,20 @@ export default function ResumePaymentButton({
   const handlePay = async () => {
     setLoading(true);
     try {
+      // Which gateway is switched on right now (Admin > Settings > Payment Gateways)?
+      const gw = await fetch('/api/payment-gateways', { cache: 'no-store' })
+        .then((r) => r.json())
+        .catch(() => null);
+      if (gw && !gw.active) {
+        throw new Error('Online payment is unavailable right now. Please contact us to complete your order.');
+      }
+      if (gw?.active === 'cashfree') {
+        await payWithCashfree(orderId);
+        toast.success('Payment successful! Order confirmed.');
+        router.push(`/order-confirmation/${orderId}`);
+        return;
+      }
+
       // Re-issues a fresh Razorpay order for the SAME internal order —
       // create-order looks up the authoritative amount server-side, so
       // this can't be tampered with, and it re-links razorpay_order_id

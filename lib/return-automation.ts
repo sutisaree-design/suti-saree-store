@@ -18,7 +18,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createDelhiveryReversePickup, trackDelhiveryShipment } from './delhivery-api';
-import { refundRazorpayPayment } from './razorpay-refund';
+import { refundOrderPayment } from './payment-refund';
 import { recordReturnRiskIncident } from './return-risk-api';
 import { sendEmail } from './email';
 import {
@@ -83,6 +83,8 @@ type OrderRow = {
   total_amount: number;
   payment_method?: string | null;
   razorpay_payment_id?: string | null;
+  payment_gateway?: string | null;
+  cashfree_order_id?: string | null;
 };
 
 /**
@@ -150,7 +152,7 @@ export async function schedulePickupForReturn(
 }
 
 /**
- * Fires the Razorpay refund for a return whose item is back at the
+ * Fires the online-payment refund (Razorpay or Cashfree) for a return whose item is back at the
  * warehouse (or that the admin is force-processing manually). No-op
  * (returns success) if already refunded, or if the order needs no
  * refund at all (COD / never actually captured payment).
@@ -179,7 +181,7 @@ export async function processRefundForReturn(
   await admin.from('returns').update({ refund_status: 'processing' }).eq('id', ret.id);
 
   const refundAmount = order.total_amount;
-  const result = await refundRazorpayPayment(order.razorpay_payment_id as string, refundAmount);
+  const result = await refundOrderPayment(order, refundAmount);
 
   if (!result.success) {
     await admin

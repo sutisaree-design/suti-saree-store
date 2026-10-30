@@ -1346,7 +1346,7 @@ function ProductInfo({
           </Dialog>
           <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
             <Lock className="h-3 w-3" />
-            Razorpay Secured
+            Secure Payments
           </span>
         </div>
       </div>
