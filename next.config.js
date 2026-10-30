@@ -34,6 +34,8 @@ const nextConfig = {
     return [
       // Old WooCommerce feed URL (Merchant Center ke saved File URL ke liye) -> naya feed
       { source: '/wp-content/uploads/woo-feed/google/xml/saree.xml', destination: '/feeds/google-saree.xml' },
+      // Old WordPress media at its original URL -> read from Cloudflare R2 (app/api/wp-uploads).
+      { source: '/wp-content/uploads/:path*', destination: '/api/wp-uploads/:path*' },
       { source: '/product-category/:parent*/:slug', destination: '/category/:slug' },      { source: '/product-tag/:slug', destination: '/tag/:slug' },
       { source: '/privacy-policy', destination: '/legal/privacy-policy' },
       { source: '/terms-and-conditions', destination: '/legal/terms-conditions' },

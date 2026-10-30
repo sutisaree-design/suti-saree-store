@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-fulfillment-shared';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { canonicalMediaUrl, deleteFromStorage, getR2Client, r2EnvPresent, type StorageBucket } from '@/lib/storage';
+import { canonicalMediaUrl, deleteFromStorage, getR2Client, type StorageBucket } from '@/lib/storage';
 
 // ---------------------------------------------------------------------
 // Admin Media Library (WordPress / WooCommerce style)
@@ -187,8 +187,22 @@ async function runPool<T>(tasks: (() => Promise<T>)[], concurrency: number): Pro
   await Promise.all(workers);
 }
 
+// Same URL the file had in the WordPress backup (served from R2 by
+// app/api/wp-uploads). Anything outside wp-content/uploads goes through /media.
 function r2UrlFor(key: string): string {
-  return `${SITE_URL}/media/${key.split('/').map(encodeURIComponent).join('/')}`;
+  const encoded = key.split('/').map(encodeURIComponent).join('/');
+  return key.startsWith('wp-content/uploads/') ? `${SITE_URL}/${encoded}` : `${SITE_URL}/media/${encoded}`;
+}
+
+// Listing + serving only need the credentials and bucket name; a public
+// R2 URL (R2_PUBLIC_URL) is NOT required for the WordPress library.
+function r2Configured(): boolean {
+  return !!(
+    process.env.R2_ACCOUNT_ID &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_NAME
+  );
 }
 
 async function listR2(): Promise<CacheEntry> {
@@ -304,14 +318,14 @@ export async function GET(req: Request) {
   const perPage = Math.min(200, Math.max(12, parseInt(sp.get('perPage') || '48', 10) || 48));
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1);
 
-  const wantR2 = (bucketParam === 'all' || bucketParam === 'r2') && r2EnvPresent();
+  const wantR2 = (bucketParam === 'all' || bucketParam === 'r2') && r2Configured();
   const buckets = bucketParam === 'all' ? BUCKETS : BUCKETS.filter((b) => b === bucketParam);
   if (buckets.length === 0 && bucketParam !== 'r2') {
     return NextResponse.json({ error: 'Unknown bucket.' }, { status: 400 });
   }
   if (bucketParam === 'r2' && !wantR2) {
     return NextResponse.json(
-      { error: 'Cloudflare R2 is not configured (R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET_NAME / R2_PUBLIC_URL).' },
+      { error: 'Cloudflare R2 is not configured (R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET_NAME).' },
       { status: 400 }
     );
   }
@@ -413,7 +427,7 @@ export async function DELETE(req: Request) {
   // WordPress-generated copies (photo-300x300.jpg …) from R2 only.
   if (body.bucket === 'r2') {
     const key = (body.path || '').trim();
-    if (!r2EnvPresent() || !key || key.includes('..') || R2_MIRROR_PREFIXES.has(key.split('/')[0] + '/')) {
+    if (!r2Configured() || !key || key.includes('..') || R2_MIRROR_PREFIXES.has(key.split('/')[0] + '/')) {
       return NextResponse.json({ error: 'Invalid path.' }, { status: 400 });
     }
     try {

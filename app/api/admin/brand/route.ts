@@ -3,7 +3,8 @@ import { revalidatePath } from 'next/cache';
 import sharp from 'sharp';
 import { requireAdmin } from '@/lib/admin-fulfillment-shared';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { uploadToStorage, type StorageBucket } from '@/lib/storage';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { uploadToStorage, getR2Client, type StorageBucket } from '@/lib/storage';
 import { getBrandSettings, clearBrandMemo } from '@/lib/brand-server';
 
 // ---------------------------------------------------------------------
@@ -30,6 +31,16 @@ const MEDIA_RE = /\/media\/(product-images|product-videos|review-images|support-
 type Kind = 'logo' | 'favicon';
 
 async function loadSourceFromUrl(url: string): Promise<Buffer> {
+  // WordPress library files live only in R2 (same URL as the old site).
+  const wp = url.match(/\/wp-content\/uploads\/(.+?)(?:\?.*)?$/);
+  if (wp && process.env.R2_BUCKET_NAME) {
+    const res = await getR2Client().send(
+      new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: `wp-content/uploads/${decodeURIComponent(wp[1])}` })
+    );
+    const bytes = await res.Body?.transformToByteArray();
+    if (!bytes) throw new Error('Could not read that file from the media library.');
+    return Buffer.from(bytes);
+  }
   const m = url.match(MEDIA_RE);
   if (m) {
     const admin = getSupabaseAdmin();
