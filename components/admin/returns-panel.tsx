@@ -305,7 +305,7 @@ function ReturnCard({ r, onUpdated }: { r: ReturnRow; onUpdated: () => void }) {
       const res = await fetch(`/api/admin/returns/${r.id}/refund`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast.success('Refund processed via Razorpay — customer notified');
+        toast.success('Refund processed via the original payment gateway — customer notified');
         onUpdated();
       } else {
         toast.error(body.error || 'Refund failed');

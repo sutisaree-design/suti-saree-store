@@ -41,7 +41,7 @@ const EVENT_LABELS: Record<string, { label: string; icon: any }> = {
   email_send_failed: { label: 'Email failed to send', icon: MailWarning },
   link_clicked: { label: 'Customer clicked the email link', icon: MousePointerClick },
   page_visited: { label: 'Customer opened the payment page', icon: DoorOpen },
-  payment_attempt_created: { label: 'Customer tried to pay (Razorpay opened)', icon: CreditCard },
+  payment_attempt_created: { label: 'Customer tried to pay (payment window opened)', icon: CreditCard },
   payment_verified: { label: 'Payment succeeded', icon: CheckCircle2 },
   payment_failed: { label: 'Payment attempt failed', icon: XCircle },
 };

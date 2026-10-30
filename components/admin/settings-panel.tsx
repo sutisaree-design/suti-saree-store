@@ -143,6 +143,10 @@ export default function SettingsPanel() {
   const [gatewayForm, setGatewayForm] = useState<PaymentGatewaySettings | null>(null);
   const [gatewayConfigured, setGatewayConfigured] = useState<{ razorpay: boolean; cashfree: boolean; cashfreeMode: string } | null>(null);
   const [savingGateways, setSavingGateways] = useState(false);
+  // Name of the gateway customers are paying through right now ("online payment" when all are off).
+  // Used so the texts below always match whichever gateway is enabled.
+  const activeGw = gatewayForm ? resolveActiveGateway(gatewayForm) : null;
+  const gwName = activeGw ? GATEWAY_LABEL[activeGw] : 'online payment';
   const [catalogVideoForm, setCatalogVideoForm] = useState<CatalogVideoSettings | null>(null);
   const [savingCatalogVideo, setSavingCatalogVideo] = useState(false);
   const [catalogListingForm, setCatalogListingForm] = useState<CatalogListingSettings | null>(null);
@@ -1833,7 +1837,7 @@ export default function SettingsPanel() {
       <div className="mt-8">
         <h2 className="font-serif text-2xl font-bold text-primary">Partial Pay (Advance + Pay on Delivery)</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Customer pays a part of the order online now (Razorpay) and the rest to the courier on
+          Customer pays a part of the order online now ({gwName}) and the rest to the courier on
           delivery. Delhivery is told to collect only the balance. No online-payment discount is
           given on Partial Pay orders.
         </p>
@@ -2086,7 +2090,7 @@ export default function SettingsPanel() {
         <h2 className="font-serif text-2xl font-bold text-primary">Order Cancellation Refunds</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           When a customer cancels an order they paid for online, this controls whether the refund
-          is issued automatically via Razorpay, or left for you to process by hand.
+          is issued automatically via {gwName} (the gateway the customer paid with), or left for you to process by hand.
         </p>
       </div>
 
@@ -2100,8 +2104,8 @@ export default function SettingsPanel() {
             </Label>
             <p className="text-xs text-muted-foreground">
               {refundAutomationForm.auto_refund_enabled
-                ? 'On: refunds are issued to the customer via Razorpay the moment they cancel — nothing for you to do.'
-                : 'Off: the order is still cancelled instantly, but no refund is sent. You\u2019ll need to refund the customer yourself from the Razorpay dashboard or the Orders panel.'}
+                ? `On: refunds are issued to the customer via ${gwName} the moment they cancel — nothing for you to do.`
+                  : `Off: the order is still cancelled instantly, but no refund is sent. You\u2019ll need to refund the customer yourself from the ${gwName} dashboard or the Orders panel.`}
             </p>
           </div>
           <Switch
@@ -2790,7 +2794,7 @@ export default function SettingsPanel() {
                 }
               />
               <p className="text-xs text-muted-foreground">
-                E.g. Razorpay's ~2.36% (2% + 18% GST). Applied only to the prepaid share of orders.
+                E.g. {gwName === 'Razorpay' ? 'Razorpay\u2019s ~2.36% (2% + 18% GST)' : `your ${gwName} fee incl. GST (check your Cashfree plan rate)`}. Applied only to the prepaid share of orders.
               </p>
             </div>
             <div className="grid gap-1.5">
