@@ -34,6 +34,7 @@ import ReviewRewardsPanel from '@/components/admin/review-rewards-panel';
 import ReferralsPanel from '@/components/admin/referrals-panel';
 import ResellersPanel from '@/components/admin/resellers-panel';
 import CacheWarmPanel from '@/components/admin/cache-warm-panel';
+import IntegrationsPanel from '@/components/admin/integrations-panel';
 import AffiliatesPanel from '@/components/admin/affiliates-panel';
 import GiftCardsPanel from '@/components/admin/giftcards-panel';
 import VendorsPanel from '@/components/admin/vendors-panel';
@@ -83,6 +84,7 @@ const PANELS: Record<AdminSection, React.ComponentType> = {
   settings: SettingsPanel,
   'gst-report': GstReportPanel,
   'cache-warm': CacheWarmPanel,
+  integrations: IntegrationsPanel,
 };
 
 const VALID_SECTIONS = Object.keys(PANELS) as AdminSection[];

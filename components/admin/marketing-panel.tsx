@@ -810,6 +810,10 @@ function AnalyticsTab() {
 
   return (
     <form onSubmit={onSubmit} className="mt-4 max-w-lg space-y-6">
+      <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+        Tip: Google Analytics, Google Ads conversions (with Enhanced Conversions) and Meta Pixel events now have their
+        own page — <b>Configuration → Integrations</b>. Both pages edit the same settings.
+      </p>
       <div className="space-y-3 rounded-lg border border-border p-3">
         <div className="flex items-center justify-between">
           <div>

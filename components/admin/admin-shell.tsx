@@ -43,6 +43,7 @@ import {
   Sparkles,
   Award,
   FolderOpen,
+  Plug,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationBell from './notification-bell';
@@ -85,6 +86,7 @@ export type AdminSection =
   | 'vendor-reports'
   | 'product-sources'
   | 'cache-warm'
+  | 'integrations'
   | 'gst-report'
   | 'settings';
 
@@ -168,6 +170,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Configuration',
     items: [
       { value: 'gst-report', label: 'GST Report', icon: IndianRupee },
+      { value: 'integrations', label: 'Integrations', icon: Plug },
       { value: 'settings', label: 'Settings', icon: Settings },
       { value: 'cache-warm', label: 'Cache Warm', icon: Flame },
     ],

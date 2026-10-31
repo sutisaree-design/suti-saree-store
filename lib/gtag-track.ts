@@ -24,6 +24,9 @@ export function fireGtagEvent(eventName: string, params: Record<string, unknown>
     const gtag = (window as any).gtag;
     if (typeof gtag === 'function') {
       gtag('event', eventName, params);
+      // Optional Google Ads conversions for add_to_cart / begin_checkout
+      // (labels are set in Admin > Integrations; nothing happens when empty).
+      fireAdsConversionForEvent(eventName, params);
       return;
     }
     attempts += 1;
@@ -33,6 +36,87 @@ export function fireGtagEvent(eventName: string, params: Record<string, unknown>
   };
 
   tryFire();
+  // Meta Pixel standard event with the same data (no-op when the pixel is off).
+  fireMetaEventForGtag(eventName, params);
+}
+
+// ---------------------------------------------------------------------------
+// Admin > Integrations: Google Ads conversions + Meta Pixel standard events
+// ---------------------------------------------------------------------------
+
+interface TrackingConfig {
+  adsId?: string;
+  purchaseLabel?: string;
+  addToCartLabel?: string;
+  beginCheckoutLabel?: string;
+  enhanced?: boolean;
+  pixel?: boolean;
+  metaEvents?: boolean;
+}
+
+/** Config injected by components/analytics-scripts.tsx from Admin > Integrations. */
+export function getTrackingConfig(): TrackingConfig {
+  if (typeof window === 'undefined') return {};
+  return ((window as any).__TRACKING__ as TrackingConfig) || {};
+}
+
+/** Fires the Google Ads conversion event for `label`, if an Ads ID + label are configured. */
+export function fireAdsConversion(label: string | undefined, payload: { value?: number; transactionId?: string }): void {
+  const cfg = getTrackingConfig();
+  const gtag = (window as any).gtag;
+  if (!cfg.adsId || !label || typeof gtag !== 'function') return;
+  gtag('event', 'conversion', {
+    send_to: `${cfg.adsId}/${label}`,
+    value: payload.value ?? 0,
+    currency: 'INR',
+    ...(payload.transactionId ? { transaction_id: payload.transactionId } : {}),
+  });
+}
+
+function fireAdsConversionForEvent(eventName: string, params: Record<string, unknown>): void {
+  const cfg = getTrackingConfig();
+  const value = typeof params.value === 'number' ? params.value : undefined;
+  if (eventName === 'add_to_cart') fireAdsConversion(cfg.addToCartLabel, { value });
+  else if (eventName === 'begin_checkout') fireAdsConversion(cfg.beginCheckoutLabel, { value });
+}
+
+/** Sends a Meta Pixel event, retrying while fbevents.js is still loading (it loads after first interaction). */
+export function fireMetaEvent(name: string, params: Record<string, unknown>, eventId?: string): void {
+  if (typeof window === 'undefined') return;
+  let attempts = 0;
+  const maxAttempts = 20;
+  const tryFire = () => {
+    const cfg = getTrackingConfig();
+    if (!cfg.metaEvents) return;
+    const fbq = (window as any).fbq;
+    if (typeof fbq === 'function') {
+      if (eventId) fbq('track', name, params, { eventID: eventId });
+      else fbq('track', name, params);
+      return;
+    }
+    attempts += 1;
+    if (attempts < maxAttempts) setTimeout(tryFire, 500);
+  };
+  tryFire();
+}
+
+function fireMetaEventForGtag(eventName: string, params: Record<string, unknown>): void {
+  const map: Record<string, string> = {
+    view_item: 'ViewContent',
+    add_to_cart: 'AddToCart',
+    begin_checkout: 'InitiateCheckout',
+  };
+  const metaName = map[eventName];
+  if (!metaName) return;
+  const items = Array.isArray(params.items) ? (params.items as any[]) : [];
+  const ids = items.map((i) => String(i.item_id ?? '')).filter(Boolean);
+  fireMetaEvent(metaName, {
+    content_ids: ids,
+    content_type: 'product',
+    value: typeof params.value === 'number' ? params.value : undefined,
+    currency: (params.currency as string) || 'INR',
+    num_items: items.reduce((n, i) => n + (Number(i.quantity) || 1), 0) || undefined,
+  });
 }
 
 /**

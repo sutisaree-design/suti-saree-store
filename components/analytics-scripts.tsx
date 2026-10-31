@@ -9,6 +9,12 @@ interface AnalyticsScriptsProps {
   gtmId: string;
   googleAdsId: string;
   pixelId: string;
+  // Admin > Integrations
+  adsPurchaseLabel?: string;
+  adsAddToCartLabel?: string;
+  adsBeginCheckoutLabel?: string;
+  enhancedConversions?: boolean;
+  metaEvents?: boolean;
 }
 
 // Pages where tracking must start immediately (conversion pages).
@@ -43,6 +49,11 @@ export default function AnalyticsScripts({
   gtmId,
   googleAdsId,
   pixelId,
+  adsPurchaseLabel = '',
+  adsAddToCartLabel = '',
+  adsBeginCheckoutLabel = '',
+  enhancedConversions = true,
+  metaEvents = true,
 }: AnalyticsScriptsProps) {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith('/admin');
@@ -90,11 +101,20 @@ export default function AnalyticsScripts({
     <>
       {/* Tiny queue stub: runs immediately so early events are never lost.
           Real gtag.js / gtm.js / fbevents.js load later (below). */}
-      {(gtmId || gaId) && (
+      {(gtmId || gaId || googleAdsId || pixelId) && (
         <Script id="gtag-queue-stub" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
-            ${!gtmId ? 'window.gtag = window.gtag || function(){dataLayer.push(arguments);};' : ''}
+            window.gtag = window.gtag || function(){dataLayer.push(arguments);};
+            window.__TRACKING__ = ${JSON.stringify({
+              adsId: googleAdsId,
+              purchaseLabel: adsPurchaseLabel,
+              addToCartLabel: adsAddToCartLabel,
+              beginCheckoutLabel: adsBeginCheckoutLabel,
+              enhanced: !!googleAdsId && enhancedConversions,
+              pixel: !!pixelId,
+              metaEvents: !!pixelId && metaEvents,
+            }).replace(/</g, '\\u003c')};
           `}
         </Script>
       )}
@@ -113,8 +133,9 @@ export default function AnalyticsScripts({
         </Script>
       )}
 
-      {/* GA4 + Google Ads gtag.js — used when GTM is NOT configured. */}
-      {!gtmId && gaId && (
+      {/* GA4 + Google Ads gtag.js — used when GTM is NOT configured.
+          Works with just a GA4 ID, just a Google Ads ID, or both. */}
+      {!gtmId && (gaId || googleAdsId) && (
         <>
           <Script id="ga4-init" strategy="afterInteractive">
             {`
@@ -122,13 +143,19 @@ export default function AnalyticsScripts({
               function gtag(){dataLayer.push(arguments);}
               window.gtag = window.gtag || gtag;
               gtag('js', new Date());
-              gtag('config', '${gaId}');
-              ${googleAdsId ? `gtag('config', '${googleAdsId}');` : ''}
+              ${gaId ? `gtag('config', '${gaId}');` : ''}
+              ${
+                googleAdsId
+                  ? enhancedConversions
+                    ? `gtag('config', '${googleAdsId}', { allow_enhanced_conversions: true });`
+                    : `gtag('config', '${googleAdsId}');`
+                  : ''
+              }
             `}
           </Script>
           {ready && (
             <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaId || googleAdsId}`}
               strategy="afterInteractive"
             />
           )}

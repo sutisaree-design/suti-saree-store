@@ -88,6 +88,11 @@ const DEFAULT_ANALYTICS: AnalyticsSettings = {
   trustpilot_integration_key: '',
   gcr_badge_enabled: true,
   gcr_optin_enabled: true,
+  google_ads_purchase_label: '',
+  google_ads_add_to_cart_label: '',
+  google_ads_begin_checkout_label: '',
+  enhanced_conversions_enabled: true,
+  meta_events_enabled: true,
 };
 
 // Reads Admin > Marketing > Analytics settings (Google Analytics + Meta
@@ -259,7 +264,17 @@ export default async function RootLayout({
 
         {/* GTM / GA4 / Meta Pixel — gated so they never fire on /admin
             routes. See components/analytics-scripts.tsx. */}
-        <AnalyticsScripts gaId={gaId} gtmId={gtmId} googleAdsId={googleAdsId} pixelId={pixelId} />
+        <AnalyticsScripts
+          gaId={gaId}
+          gtmId={gtmId}
+          googleAdsId={googleAdsId}
+          pixelId={pixelId}
+          adsPurchaseLabel={analytics.google_ads_purchase_label.trim()}
+          adsAddToCartLabel={analytics.google_ads_add_to_cart_label.trim()}
+          adsBeginCheckoutLabel={analytics.google_ads_begin_checkout_label.trim()}
+          enhancedConversions={analytics.enhanced_conversions_enabled !== false}
+          metaEvents={analytics.meta_events_enabled !== false}
+        />
       </head>
       <body className="font-sans antialiased">
         {/* Keeps window.__BLUR_SHIMMER_ENABLED__ / __BLUR_REAL_PREVIEW_ENABLED__

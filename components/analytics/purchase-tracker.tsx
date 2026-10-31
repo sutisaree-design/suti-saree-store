@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { setGtagUserData } from '@/lib/gtag-track';
+import { setGtagUserData, fireAdsConversion, fireMetaEvent, getTrackingConfig } from '@/lib/gtag-track';
 
 interface PurchaseTrackerItem {
   product_id: string | null;
@@ -108,6 +108,24 @@ export default function PurchaseTracker({
             quantity: item.quantity,
           })),
         });
+        // Google Ads "Purchase" conversion (Admin > Integrations). Enhanced
+        // Conversions data was set just above, so it rides along with this.
+        // transaction_id = order id => Google de-duplicates repeat reports.
+        fireAdsConversion(getTrackingConfig().purchaseLabel, { value, transactionId: orderId });
+
+        // Meta Pixel Purchase. eventID = order id lets Meta de-duplicate it
+        // against a server-side (Conversions API) event later.
+        fireMetaEvent(
+          'Purchase',
+          {
+            value,
+            currency: 'INR',
+            content_type: 'product',
+            content_ids: items.map((i) => String(i.feed_item_id ?? i.product_id ?? i.product_name)),
+            num_items: items.reduce((n, i) => n + i.quantity, 0),
+          },
+          orderId
+        );
         try {
           sessionStorage.setItem(dedupeKey, '1');
         } catch {

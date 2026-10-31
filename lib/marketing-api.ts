@@ -560,6 +560,13 @@ export interface AnalyticsSettings {
   trustpilot_integration_key: string; // Trustpilot > Integrations > Ecommerce > JavaScript Integration
   gcr_badge_enabled: boolean; // Google Customer Reviews badge (store widget) on the storefront
   gcr_optin_enabled: boolean; // Google Customer Reviews survey popup on the order-confirmation page
+  // --- Admin > Integrations (Google Ads conversions / Enhanced Conversions / Meta events) ---
+  // Conversion LABEL = the part after the slash in  AW-123456789/AbCdEfGh  (Google Ads > Goals > Conversions > Tag setup).
+  google_ads_purchase_label: string; // fires on every paid order (the one that matters)
+  google_ads_add_to_cart_label: string; // optional secondary conversion
+  google_ads_begin_checkout_label: string; // optional secondary conversion
+  enhanced_conversions_enabled: boolean; // send hashed email/phone/address with the Ads purchase conversion
+  meta_events_enabled: boolean; // Meta Pixel standard events: ViewContent, AddToCart, InitiateCheckout, Purchase
 }
 
 const DEFAULT_ANALYTICS_SETTINGS: AnalyticsSettings = {
@@ -575,7 +582,15 @@ const DEFAULT_ANALYTICS_SETTINGS: AnalyticsSettings = {
   // Both on by default so nothing changes until an admin switches them off.
   gcr_badge_enabled: true,
   gcr_optin_enabled: true,
+  google_ads_purchase_label: '',
+  google_ads_add_to_cart_label: '',
+  google_ads_begin_checkout_label: '',
+  // On by default: harmless until an Ads ID + purchase label exist, and it is what makes conversions match better.
+  enhanced_conversions_enabled: true,
+  meta_events_enabled: true,
 };
+
+export const DEFAULT_ANALYTICS = DEFAULT_ANALYTICS_SETTINGS;
 
 export async function fetchAnalyticsSettings(): Promise<AnalyticsSettings> {
   const { data, error } = await supabase
