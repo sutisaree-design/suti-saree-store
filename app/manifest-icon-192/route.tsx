@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { loadFavicon } from '@/lib/favicon-source';
 
 // PWA manifest icons need fixed, un-hashed URLs at specific sizes (192x192
 // and 512x512 are the two Chrome/Android actually require to show the
@@ -30,21 +31,14 @@ export async function GET() {
   const size = { width: 192, height: 192 };
   const faviconUrl = await getFaviconUrl();
 
-  if (faviconUrl) {
-    try {
-      const res = await fetch(faviconUrl);
-      if (res.ok) {
-        const buffer = await res.arrayBuffer();
-        return new Response(buffer, {
-          headers: {
-            'Content-Type': res.headers.get('content-type') || 'image/png',
-            'Cache-Control': 'public, max-age=3600',
-          },
-        });
-      }
-    } catch {
-      // fall through to the generated monogram below
-    }
+  const favicon = await loadFavicon(faviconUrl);
+  if (favicon) {
+    return new Response(favicon.body, {
+      headers: {
+        'Content-Type': favicon.contentType,
+        'Cache-Control': 'public, max-age=3600',
+      },
+    });
   }
 
   return new ImageResponse(

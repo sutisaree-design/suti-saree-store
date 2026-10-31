@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase-server';
+import { loadFavicon } from '@/lib/favicon-source';
 
 // Google requires a square favicon of at least 48x48px to reliably show it
 // next to search results (32x32 is fine for browser tabs but too small for
@@ -30,21 +31,14 @@ async function getFaviconUrl(): Promise<string> {
 export default async function Icon() {
   const faviconUrl = await getFaviconUrl();
 
-  if (faviconUrl) {
-    try {
-      const res = await fetch(faviconUrl);
-      if (res.ok) {
-        const buffer = await res.arrayBuffer();
-        return new Response(buffer, {
-          headers: {
-            'Content-Type': res.headers.get('content-type') || 'image/png',
-            'Cache-Control': 'public, max-age=3600',
-          },
-        });
-      }
-    } catch {
-      // fall through to the generated monogram below
-    }
+  const favicon = await loadFavicon(faviconUrl);
+  if (favicon) {
+    return new Response(favicon.body, {
+      headers: {
+        'Content-Type': favicon.contentType,
+        'Cache-Control': 'public, max-age=3600',
+      },
+    });
   }
 
   return new ImageResponse(
