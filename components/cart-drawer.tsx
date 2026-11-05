@@ -45,8 +45,56 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { checkPincodeServiceability, isValidPincode, PincodeResult } from '@/lib/pincode-api';
 import { STORE_POLICY } from '@/lib/store-policy';
+import {
+  fetchFulfillmentSettings,
+  DEFAULT_FULFILLMENT_SETTINGS,
+  FulfillmentSettings,
+} from '@/lib/marketing-api';
 import CartBump from '@/components/cart/cart-bump';
 import LowStockBadge from '@/components/growth/low-stock-badge';
+
+// ---- Delivery date estimate: SAME rules as components/product/pincode-checker.tsx
+// (2 PM IST order cut-off, handling days + zone transit days from Admin >
+// Marketing > Shipping & Returns Timing) so both places always show one date. ----
+const ORDER_CUTOFF_HOUR = 14;
+type DeliveryTier = 'metro' | 'other' | 'remote';
+const ZONE_TIER: Record<string, DeliveryTier> = {
+  '1': 'metro',
+  '2': 'other',
+  '3': 'other',
+  '4': 'metro',
+  '5': 'other',
+  '6': 'other',
+  '7': 'metro',
+  '8': 'remote',
+  '9': 'remote',
+};
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtDate = (d: Date) => `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]}`;
+const addDaysTo = (d: Date, n: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+};
+function estimateDelivery(pincode: string, f: FulfillmentSettings) {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setHours(ORDER_CUTOFF_HOUR, 0, 0, 0);
+  const start = new Date(now);
+  if (now >= cutoff) start.setDate(start.getDate() + 1);
+  const tier = ZONE_TIER[pincode[0]] ?? 'other';
+  const w =
+    tier === 'metro'
+      ? { min: f.delivery_metro_min, max: f.delivery_metro_max }
+      : tier === 'remote'
+        ? { min: f.delivery_remote_min, max: f.delivery_remote_max }
+        : { min: f.delivery_other_min, max: f.delivery_other_max };
+  const minDate = addDaysTo(start, f.dispatch_days_min + w.min);
+  const maxDate = addDaysTo(start, f.dispatch_days_max + w.max);
+  return fmtDate(minDate) === fmtDate(maxDate)
+    ? `By ${fmtDate(maxDate)}`
+    : `${fmtDate(minDate)} – ${fmtDate(maxDate)}`;
+}
 
 export default function CartDrawer() {
   const {
@@ -179,6 +227,13 @@ export default function CartDrawer() {
   const [pinChecking, setPinChecking] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinResult, setPinResult] = useState<PincodeResult | null>(null);
+  const [fulfillment, setFulfillment] = useState<FulfillmentSettings>(DEFAULT_FULFILLMENT_SETTINGS);
+
+  useEffect(() => {
+    fetchFulfillmentSettings()
+      .then(setFulfillment)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     try {
@@ -473,12 +528,16 @@ export default function CartDrawer() {
             <div className="border-b border-primary/10 bg-primary/5">
               <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                 {pinResult ? (
-                  <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-                    <Truck className="h-4 w-4 shrink-0 text-primary" />
-                    <span className="truncate">
-                      Delivering to <b>{pinResult.pincode}</b>
-                      {pinResult.city ? ` (${pinResult.city})` : ''}
-                      {pinResult.etaDays ? ` · ${pinResult.etaDays} days` : ''}
+                  <span className="flex min-w-0 items-start gap-2 text-sm text-foreground">
+                    <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block leading-snug">
+                        Delivering to <b>{pinResult.pincode}</b>
+                        {pinResult.city ? `, ${pinResult.city}` : ''}
+                      </span>
+                      <span className="block text-xs font-semibold text-emerald-700">
+                        Delivery: {estimateDelivery(pinResult.pincode, fulfillment)}
+                      </span>
                     </span>
                   </span>
                 ) : (
